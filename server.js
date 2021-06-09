@@ -5,6 +5,7 @@ global.passport = require("passport");
 global.jwt = require("jsonwebtoken");
 global.jwt_decode = require("jwt-decode");
 const bcrypt = require("bcryptjs");
+const ObjectID = require("mongodb").ObjectID;
 require("./models/user");
 require("./models/vendors");
 require("dotenv").config();
@@ -32,10 +33,10 @@ app.get("/failed", (req, res) => {
   res.json({ message: "auth Failed" });
 });
 
-app.post("/api/register", (req, res) => {
+app.post("/api/registerUser", (req, res) => {
   const {
     name,
-    phoneNumber,
+    phone,
     email,
     password,
     location,
@@ -43,7 +44,7 @@ app.post("/api/register", (req, res) => {
     gender,
     address,
   } = req.body;
-  if (name && phoneNumber && email && password && location && age && gender) {
+  if (name && phone && email && password && location && age && gender) {
     bcrypt
       .hash(password, 10)
       .then((hash) => {
@@ -52,8 +53,41 @@ app.post("/api/register", (req, res) => {
           pass: hash,
         }).save();
       })
-      .then((dbres) => {
-        res.json({ registrationSuccess: true });
+      .then((dbRes) => {
+        res.json({ message: "registered successfully", user: dbRes });
+      })
+      .catch((err) => {
+        if (err.code === 11000) {
+          res.status(400).json({
+            message: "user exists",
+            code: err.code,
+            field: Object.keys(err.keyValue)[0],
+          });
+        } else {
+          console.log(err);
+          res.status(500).json({ message: "something went wrong" });
+        }
+      });
+  } else {
+    res.status(400).json({ message: "Incomplete request" });
+  }
+});
+app.post("/api/registerVendor", (req, res) => {
+  const { vendorType, name, email, password, phone } = req.body;
+  if (
+    (vendorType === "Doctor" || vendorType === "Clinic") &&
+    name &&
+    email &&
+    password &&
+    phone
+  ) {
+    const Model = global[vendorType];
+    console.log(name);
+    bcrypt
+      .hash(password, 10)
+      .then((hash) => new Model({ ...req.body, pass: hash }).save())
+      .then((dbRes) => {
+        res.json({ message: "registered successfully", user: dbRes });
       })
       .catch((err) => {
         if (err.code === 11000) {
@@ -122,11 +156,31 @@ app.get("/api/findDoctors", (req, res) => {
     res.json(data);
   });
 });
-app.get("/api/findADoctor", (req, res) => {
+app.get("/api/getDoctorInfo", (req, res) => {
   Doctor.findOne({ _id: req.query._id }).then((data) => {
     res.json(data);
   });
 });
+app.get("/api/findClinin", (req, res) => {
+  Clinic.find(...req.query).then((data) => {
+    res.json(data);
+  });
+});
+app.get("/api/getClinicInfo", (req, res) => {
+  Clinic.findOne({ _id: req.query._id }).then((data) => {
+    res.json(data);
+  });
+});
+app.get("/api/checkDoctorsCalendar", (req, res) => {
+  const { _id, from, to } = req.query;
+  const query = {
+    vendor: _id,
+    ...(from && to && { from, to }),
+  };
+  Book.find(query, "date").then((data) => {});
+});
+app.post("/api/bookAnAppointment", (req, res) => {});
+app.post("/api/bookAnAppointmentAsGuest", (req, res) => {});
 
 app.listen(PORT, () => {
   console.log("listening to port:", PORT);

@@ -4,7 +4,7 @@ const userModel = new Schema({
   facebookId: { type: String, unique: true, sparse: true },
   twitterId: { type: String, unique: true, sparse: true },
   address: { type: String },
-  phoneNumber: {
+  phone: {
     type: String,
     trim: true,
     unique: true,
@@ -22,7 +22,7 @@ const userModel = new Schema({
     },
   },
   gender: { type: String },
+  appointments: [{ type: Schema.Types.ObjectId, ref: "User", required: true }],
 });
 
-const User = mongoose.model("User", userModel);
-global.User = User;
+global.User = mongoose.model("User", userModel);
