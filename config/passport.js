@@ -12,6 +12,7 @@ const cookieExtractor = (req) => {
 };
 
 passport.use(
+  "user",
   new LocalStrategy((username, password, next) => {
     User.findOne({ $or: [{ email: username }, { phoneNumber: username }] })
       .then((user) => {
@@ -23,11 +24,35 @@ passport.use(
   })
 );
 passport.use(
+  "userPrivate",
   new JwtStrategy(
     { jwtFromRequest: cookieExtractor, secretOrKey: process.env.JWT_SECRET },
     (payload, next) => {
-      console.log("authenticating");
       User.findOne({ _id: payload.sub })
+        .then((user) => (user ? next(null, user) : next(null, false)))
+        .catch((err) => next(err, false));
+    }
+  )
+);
+
+passport.use(
+  "vendor",
+  new LocalStrategy((username, password, next) => {
+    Vendor.findOne({ $or: [{ email: username }, { phoneNumber: username }] })
+      .then((user) => {
+        if (user && bcrypt.compareSync(password, user.pass))
+          return next(null, user);
+        return next(null, false);
+      })
+      .catch((err) => next(err, false));
+  })
+);
+passport.use(
+  "vendorPrivate",
+  new JwtStrategy(
+    { jwtFromRequest: cookieExtractor, secretOrKey: process.env.JWT_SECRET },
+    (payload, next) => {
+      Vendor.findOne({ _id: payload.sub })
         .then((user) => (user ? next(null, user) : next(null, false)))
         .catch((err) => next(err, false));
     }
@@ -43,11 +68,11 @@ passport.use(
       passReqToCallback: true,
     },
     function (request, accessToken, refreshToken, profile, done) {
-      User.findOne({ email: profile.email }).then((user) => {
+      Vendor.findOne({ email: profile.email }).then((user) => {
         if (user) {
           return done(null, user);
         } else {
-          new User({
+          new Vendor({
             googleId: profile.id,
             name: profile.displayName,
             email: profile.email,
@@ -72,11 +97,12 @@ passport.use(
       callbackURL: "http://localhost:3001/facebookAuthCallback",
     },
     function (accessToken, refreshToken, profile, done) {
-      User.findOne({ facebookId: profile.id }).then((user) => {
+      console.log(profile);
+      Vendor.findOne({ facebookId: profile.id }).then((user) => {
         if (user) {
           return done(null, user);
         } else {
-          new User({
+          new Vendor({
             facebookId: profile.id,
             name: profile.displayName,
             email: profile.email,
@@ -94,9 +120,16 @@ passport.use(
   )
 );
 
-passport.serializeUser((user, next) => next(null, user._id));
-passport.deserializeUser((userId, next) => {
-  User.findById({ $or: [{ email: userId }, { phoneNumber: userId }] })
+passport.serializeUser((userData, next) => {
+  const user = {
+    type: userData.type ? "vendor" : "user",
+    userId: userData._id,
+  };
+  return next(null, user);
+});
+passport.deserializeUser((user, next) => {
+  const Model = user.type === "vendor" ? Vendor : User;
+  Model.findById({ $or: [{ email: user._id }, { phoneNumber: user._id }] })
     .then((user) => next(null, user))
     .catch((err) => {
       console.log(err);

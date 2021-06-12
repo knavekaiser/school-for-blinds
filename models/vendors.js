@@ -1,6 +1,9 @@
 const vendorModel = new Schema(
   {
     name: { type: String, required: true, trim: true },
+    googleId: { type: String, unique: true, sparse: true },
+    facebookId: { type: String, unique: true, sparse: true },
+    twitterId: { type: String, unique: true, sparse: true },
     profileImg: { type: String },
     rating: {
       totalRating: { type: Number, default: 0 },
@@ -22,17 +25,48 @@ const vendorModel = new Schema(
     },
     email: { type: String, unique: true, sparse: true },
     pass: { type: String },
+    keywords: [{ type: String }],
+    bookings: [{ type: Schema.Types.ObjectId, ref: "Book", required: true }],
+    assistants: [{ type: Schema.Types.ObjectId, ref: "" }],
+    available: { type: Boolean, default: true },
+    speciality: [{ type: String, required: true }],
   },
   { timestamps: true, discriminatorKey: "type" }
 );
+vendorModel.statics.updateBooking = (_id) => {
+  if (!ObjectID.isValid(_id)) return;
+  return Book.find({ vendor: _id }, "_id").then((allBookings) =>
+    Vendor.findByIdAndUpdate(_id, {
+      bookings: allBookings.map((item) => item._id),
+    })
+  );
+};
+vendorModel.statics.addFeedback = ({ vendor, rating, feedback, user }) => {
+  return Vendor.findById(vendor).then((vendor) => {
+    const newFeedbacks = [...vendor.rating.reviews, { rating, user, feedback }];
+    const newTotalRating =
+      newFeedbacks.reduce((a, c) => {
+        return a + c.rating;
+      }, 0) / newFeedbacks.length;
+    return Vendor.findByIdAndUpdate(vendor._id, {
+      rating: {
+        totalRating: newTotalRating,
+        reviews: newFeedbacks,
+      },
+    });
+  });
+};
 
 global.Vendor = mongoose.model("Vendor", vendorModel);
 
 global.Doctor = Vendor.discriminator(
   "Doctor",
   new Schema({
-    speciality: { type: String, required: true },
-    education: { type: String, required: true },
+    age: { type: Number, required: true },
+    gender: { type: String },
+    education: {
+      type: String,
+    },
     chambers: [
       {
         street: { type: String },
@@ -40,7 +74,7 @@ global.Doctor = Vendor.discriminator(
         state: { type: String },
         zip: { type: Number },
         charge: { type: Number },
-        available: [
+        open: [
           {
             from: { type: Date, required: true },
             to: { type: Date, required: true },
@@ -58,21 +92,18 @@ global.Doctor = Vendor.discriminator(
         },
       },
     ],
-    clinic: [{ type: String }],
-    bookings: [
-      {
-        book: { type: Schema.Types.ObjectId, ref: "Book", required: true },
-      },
-    ],
+    clinic: [{ type: Schema.Types.ObjectId, ref: "Clinic", required: true }],
     gender: { type: String },
   })
 );
 global.Clinic = Vendor.discriminator(
   "Clinic",
   new Schema({
-    bookings: [
+    doctors: [
       {
-        book: { type: Schema.Types.ObjectId, ref: "Book", required: true },
+        type: Schema.Types.ObjectId,
+        ref: "Doctor",
+        required: true,
       },
     ],
     address: {
@@ -124,12 +155,40 @@ const bookModel = new Schema(
     },
     completed: { type: Boolean, default: false },
     cancelled: { type: Boolean, default: false },
+    approved: { type: Boolean, default: false },
   },
   { timestamps: true }
 );
 
 const Book = mongoose.model("Book", bookModel);
 global.Book = Book;
+
+const prescirptionModel = new Schema(
+  {
+    user: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    vendor: { type: Schema.Types.ObjectId, ref: "Vendor", required: true },
+    img: { type: String },
+    date: { type: Date, default: Date.now },
+    medicines: [
+      {
+        name: { type: String },
+        brand: { type: String },
+        timeLine: {
+          from: { type: Date },
+          to: { type: Date },
+        },
+        timesToTake: [
+          {
+            type: String,
+          },
+        ],
+      },
+    ],
+  },
+  { timestamps: true }
+);
+
+const Prescription = mongoose.model("Prescription", prescirptionModel);
 
 const blogModel = new Schema(
   {
@@ -144,3 +203,28 @@ const blogModel = new Schema(
 
 const Blog = mongoose.model("Blog", blogModel);
 global.Blog = Blog;
+
+const assistantModel = new Schema({
+  name: { type: String, required: true },
+  canApproveAppointments: { type: Boolean, default: false },
+});
+global.Assistant = mongoose.model("Assistant", assistantModel);
+
+const specialityModel = new Schema({
+  name: { type: String, required: true },
+  symptoms: { tpye: String },
+});
+
+const Speciality = mongoose.model("Speciality", specialityModel);
+
+const vendorLoginOTPModel = new Schema(
+  {
+    id: { type: String, required: true, unique: true },
+    code: { type: String, required: true },
+    expireAt: { type: Date, default: Date.now, index: { expires: "2m" } },
+    attempt: { type: Number, default: 0 },
+  },
+  { timestamp: true }
+);
+
+global.LoginOTP = mongoose.model("VendorLoginOTP", vendorLoginOTPModel);
