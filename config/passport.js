@@ -14,7 +14,7 @@ const cookieExtractor = (req) => {
 passport.use(
   "user",
   new LocalStrategy((username, password, next) => {
-    User.findOne({ $or: [{ email: username }, { phoneNumber: username }] })
+    User.findOne({ $or: [{ email: username }, { phone: username }] })
       .then((user) => {
         if (user && bcrypt.compareSync(password, user.pass))
           return next(null, user);
@@ -38,7 +38,7 @@ passport.use(
 passport.use(
   "vendor",
   new LocalStrategy((username, password, next) => {
-    Vendor.findOne({ $or: [{ email: username }, { phoneNumber: username }] })
+    Vendor.findOne({ $or: [{ email: username }, { phone: username }] })
       .then((user) => {
         if (user && bcrypt.compareSync(password, user.pass))
           return next(null, user);
@@ -129,7 +129,7 @@ passport.serializeUser((userData, next) => {
 });
 passport.deserializeUser((user, next) => {
   const Model = user.type === "vendor" ? Vendor : User;
-  Model.findById({ $or: [{ email: user._id }, { phoneNumber: user._id }] })
+  Model.findById({ $or: [{ email: user._id }, { phone: user._id }] })
     .then((user) => next(null, user))
     .catch((err) => {
       console.log(err);

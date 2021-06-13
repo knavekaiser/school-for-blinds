@@ -30,11 +30,75 @@ const vendorModel = new Schema(
     assistants: [{ type: Schema.Types.ObjectId, ref: "" }],
     available: { type: Boolean, default: true },
     speciality: [{ type: String, required: true }],
+    chambers: [
+      {
+        _id: { type: Schema.Types.ObjectId, default: new ObjectId() },
+        street: { type: String, required: true },
+        city: { type: String, required: true },
+        state: { type: String, required: true },
+        zip: { type: Number, required: true },
+        charge: { type: Number, required: true },
+        open: { type: Boolean, default: true },
+        visitingDays: [
+          {
+            day: { type: Number, required: true },
+            hours: [
+              {
+                from: { type: String, required: true },
+                to: { type: String, required: true },
+              },
+            ],
+          },
+        ],
+        sessionLength: { type: Number },
+        location: {
+          type: {
+            type: String,
+            enum: ["Point"],
+          },
+          coordinates: {
+            type: [Number],
+          },
+        },
+      },
+    ],
+    chat: {
+      available: { type: Boolean, default: false },
+      charge: { type: Number },
+      sessionLength: { type: Number },
+      days: [
+        {
+          day: { type: Number, required: true },
+          hours: [
+            {
+              from: { type: String, required: true },
+              to: { type: String, required: true },
+            },
+          ],
+        },
+      ],
+    },
+    teleConsult: {
+      available: { type: Boolean, default: false },
+      charge: { type: Number },
+      sessionLength: { type: Number },
+      days: [
+        {
+          day: { type: Number, required: true },
+          hours: [
+            {
+              from: { type: String, required: true },
+              to: { type: String, required: true },
+            },
+          ],
+        },
+      ],
+    },
   },
   { timestamps: true, discriminatorKey: "type" }
 );
 vendorModel.statics.updateBooking = (_id) => {
-  if (!ObjectID.isValid(_id)) return;
+  if (!ObjectId.isValid(_id)) return;
   return Book.find({ vendor: _id }, "_id").then((allBookings) =>
     Vendor.findByIdAndUpdate(_id, {
       bookings: allBookings.map((item) => item._id),
@@ -64,36 +128,7 @@ global.Doctor = Vendor.discriminator(
   new Schema({
     age: { type: Number, required: true },
     gender: { type: String },
-    education: {
-      type: String,
-    },
-    chambers: [
-      {
-        street: { type: String },
-        city: { type: String },
-        state: { type: String },
-        zip: { type: Number },
-        charge: { type: Number },
-        open: [
-          {
-            from: { type: Date, required: true },
-            to: { type: Date, required: true },
-          },
-        ],
-        sessionLength: { type: Number },
-        location: {
-          type: {
-            type: String,
-            enum: ["point"],
-          },
-          coordinates: {
-            type: [Number],
-          },
-        },
-      },
-    ],
-    clinic: [{ type: Schema.Types.ObjectId, ref: "Clinic", required: true }],
-    gender: { type: String },
+    education: { type: String },
   })
 );
 global.Clinic = Vendor.discriminator(
@@ -106,28 +141,6 @@ global.Clinic = Vendor.discriminator(
         required: true,
       },
     ],
-    address: {
-      street: { type: String },
-      city: { type: String },
-      state: { type: String },
-      zip: { type: Number },
-      charge: { type: Number },
-      location: {
-        type: {
-          type: String,
-          enum: ["point"],
-        },
-        coordinates: {
-          type: [Number],
-        },
-      },
-      open: [
-        {
-          from: { type: Date, required: true },
-          to: { type: Date, required: true },
-        },
-      ],
-    },
   })
 );
 
@@ -138,20 +151,10 @@ const bookModel = new Schema(
     date: { type: Date, required: true },
     sessionLength: { type: Number },
     charge: { type: Number },
-    address: {
-      street: { type: String },
-      city: { type: String },
-      state: { type: String },
-      zip: { type: Number },
-      location: {
-        type: {
-          type: String,
-          enum: ["point"],
-        },
-        coordinates: {
-          type: [Number],
-        },
-      },
+    chamber: {
+      type: Schema.Types.ObjectId,
+      ref: "Vendor.chamber",
+      required: true,
     },
     completed: { type: Boolean, default: false },
     cancelled: { type: Boolean, default: false },
@@ -204,6 +207,22 @@ const blogModel = new Schema(
 const Blog = mongoose.model("Blog", blogModel);
 global.Blog = Blog;
 
+const teleConsultModel = new Schema(
+  {
+    token: { type: Number, required: true },
+    date: { type: Date, required: true },
+    vendor: { type: Schema.Types.ObjectId, ref: "vendors", required: true },
+    user: { type: Schema.Types.ObjectId, ref: "users", required: true },
+    charge: { type: Number },
+    sessionLength: { type: Number, required: true },
+    paid: { type: Boolean, default: false },
+    completed: { type: Boolean, default: false },
+    cancelled: { type: Boolean, default: false },
+  },
+  { timestamps: true }
+);
+global.TeleConsult = mongoose.model("TeleConsult", teleConsultModel);
+
 const assistantModel = new Schema({
   name: { type: String, required: true },
   canApproveAppointments: { type: Boolean, default: false },
@@ -212,12 +231,12 @@ global.Assistant = mongoose.model("Assistant", assistantModel);
 
 const specialityModel = new Schema({
   name: { type: String, required: true },
-  symptoms: { tpye: String },
+  symptoms: { type: String },
 });
 
-const Speciality = mongoose.model("Speciality", specialityModel);
+global.Speciality = mongoose.model("Speciality", specialityModel);
 
-const vendorLoginOTPModel = new Schema(
+const OTPModel = new Schema(
   {
     id: { type: String, required: true, unique: true },
     code: { type: String, required: true },
@@ -227,4 +246,4 @@ const vendorLoginOTPModel = new Schema(
   { timestamp: true }
 );
 
-global.LoginOTP = mongoose.model("VendorLoginOTP", vendorLoginOTPModel);
+global.OTP = mongoose.model("OTP", OTPModel);

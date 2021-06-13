@@ -11,7 +11,7 @@ const userModel = new Schema({
     location: {
       type: {
         type: String,
-        enum: ["point"],
+        enum: ["Point"],
       },
       coordinates: {
         type: [Number],
@@ -26,20 +26,12 @@ const userModel = new Schema({
   },
   email: { type: String, unique: true, sparse: true },
   pass: { type: String },
-  location: {
-    type: {
-      type: String,
-      enum: ["point"],
-    },
-    coordinates: {
-      type: [Number],
-    },
-  },
   gender: { type: String },
   appointments: [{ type: Schema.Types.ObjectId, ref: "User", required: true }],
+  status: { type: String, default: "basic" },
 });
 userModel.statics.updateBooking = (_id) => {
-  if (!ObjectID.isValid(_id)) return;
+  if (!ObjectId.isValid(_id)) return;
   return Book.find({ user: _id }, "_id").then((allBookings) =>
     User.findByIdAndUpdate(_id, {
       appointments: allBookings.map((item) => item._id),
