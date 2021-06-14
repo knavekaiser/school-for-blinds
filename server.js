@@ -85,7 +85,7 @@ app.post("/api/registerUser", (req, res) => {
         if (dbRes) {
           signingIn(dbRes, res);
         } else {
-          res.status(500).json({ message: "something went worng" });
+          res.status(500).json({ message: "something went wrong" });
         }
       })
       .catch((err) => {
@@ -128,6 +128,28 @@ app.get(
     res.status(401).json({ code: 401, message: "invalid credentials" });
   }
 );
+
+app.get("/api/viewUserPrfile", (req, res) => {
+  User.findOne({ _id: req.query._id }, "-pass -__v")
+    .populate("appointments")
+    .then((dbRes) => {
+      res.json({ dbRes });
+    })
+    .catch((err) => {
+      console.log(err);
+      res.status(400).json({ message: "something went wrong" });
+    });
+});
+app.patch("/api/editUserProfile", (req, res) => {
+  User.findOneAndUpdate({ _id: req.body._id }, { ...req.body })
+    .then((dbRes) => {
+      res.json({ message: "profile updated" });
+    })
+    .catch((err) => {
+      console.log(err);
+      res.status(500).json({ message: "something went wrong" });
+    });
+});
 
 app.post("/api/sendUserOTP", async (req, res) => {
   const { phone } = req.body;
@@ -308,7 +330,7 @@ app.post("/api/registerVendor", (req, res) => {
         if (dbRes) {
           signingIn(dbRes, res);
         } else {
-          res.status(500).json({ message: "something went worng" });
+          res.status(500).json({ message: "something went wrong" });
         }
       })
       .catch((err) => {
@@ -350,20 +372,18 @@ app.get(
     res.status(401).json({ code: 401, message: "invalid credentials" });
   }
 );
-app.get(
-  "/api/vendorPrivate",
-  passport.authenticate("vendorPrivate", {
-    session: false,
-    failWithError: true,
-  }),
-  (req, res) => {
-    res.json({ message: "private route" });
-  },
-  (err, req, res, next) => {
-    res.status(401).json({ code: 401, message: "invalid credentials" });
-  }
-);
 
+app.get("/api/viewVendorPrfile", (req, res) => {
+  Vendor.findOne({ _id: req.query._id }, "-pass -__v")
+    .populate("bookings")
+    .then((dbRes) => {
+      res.json({ dbRes });
+    })
+    .catch((err) => {
+      console.log(err);
+      res.status(400).json({ message: "something went wrong" });
+    });
+});
 app.patch("/api/editVendorProfile", (req, res) => {
   Vendor.findOneAndUpdate({ _id: req.body._id }, { ...req.body })
     .then((dbRes) => {
@@ -763,7 +783,7 @@ app.get("/api/findVendors", (req, res) => {
         speciality: 1,
         age: 1,
         chambers: 1, //{ $size: { $ifNull: ["$chambers", []] } },
-        bookings: { $size: { $ifNull: ["$bookings", []] } },
+        popularity: { $size: { $ifNull: ["$bookings", []] } },
         price: {
           $cond: {
             if: { $gt: [{ $sum: "$chambers.charge" }, 0] },
@@ -801,7 +821,7 @@ app.get("/api/findVendors", (req, res) => {
 });
 app.get("/api/getVendorDetails", (req, res) => {
   if (!ObjectId.isValid(req.query._id)) {
-    res.status(400).json({ message: "worng _id" });
+    res.status(400).json({ message: "wrong _id" });
     return;
   }
   Vendor.findOne({ _id: req.query._id }).then((data) => {
@@ -838,7 +858,7 @@ app.post("/api/bookAnAppointment", (req, res) => {
       bookingInfo = dbRes;
       return Promise.all([
         Vendor.updateBooking(vendor),
-        User.updateBooking(user),
+        User.updateAppointments(user),
       ]);
     })
     .then(() => {
@@ -907,9 +927,7 @@ app.patch("/api/cancelAnAppointment", (req, res) => {
       res.status(500).json({ message: "something went wrong" });
     });
 });
-app.patch("/api/updatedPrescription", (req, res) => {
-  Prescription.findByIdAndUpdate(req.body._id, { ...req.body });
-});
+
 app.post("/api/addPrescription", (req, res) => {
   const { vendor, user, date, img, medicines } = req.body;
   new Prescription({
@@ -925,6 +943,16 @@ app.post("/api/addPrescription", (req, res) => {
     })
     .catch((err) => {
       res.json({ message: "something went wrong" });
+    });
+});
+app.patch("/api/updatedPrescription", (req, res) => {
+  Prescription.findByIdAndUpdate(req.body._id, { ...req.body })
+    .then((dbRes) => {
+      res.json({ message: "prescription updated" });
+    })
+    .catch((err) => {
+      console.log(err);
+      res.status(500).json({ message: "something went wrong" });
     });
 });
 
@@ -945,6 +973,7 @@ app.patch("/api/sessionCompleted", (req, res) => {
       return Book.find({
         vendor: currentAppointment.vendor,
         date: { $gte: new Date(currentAppointment.date) },
+        chamber: currentAppointment.chamber,
         completed: false,
       })
         .sort({ date: 1 })
@@ -997,7 +1026,7 @@ app.post("/api/giveFeedbackToVendor", (req, res) => {
     });
 });
 app.get("/api/getDelay", (req, res) => {
-  const { vendor, appointmentTime } = req.query;
+  const { vendor, chamber, appointmentTime } = req.query;
   if (!ObjectId.siValid(vendor)) {
     res.status(400).json({ message: "wrong or no id" });
     return;
@@ -1007,6 +1036,7 @@ app.get("/api/getDelay", (req, res) => {
       $match: {
         approved: true,
         vendor: ObjectId(vendor),
+        chamber: chamber,
         date: { $lt: Date("2021-06-09T06:52:29.000+00:00") },
       },
     },
@@ -1032,10 +1062,10 @@ app.get("/api/getDelay", (req, res) => {
     });
 });
 
-app.patch("/api/addTeleConsultHour", (req, res) => {
+app.patch("/api/updateTeleConsultTimeslots", (req, res) => {
   Vendor.findOneAndUpdate(
     { _id: req.body._id },
-    { "teleConsult.hours": req.body.hours }
+    { "teleConsult.days": req.body.days }
   )
     .then((dbRes) => {
       res.json({ message: "hours updated" });
@@ -1045,7 +1075,7 @@ app.patch("/api/addTeleConsultHour", (req, res) => {
       res.status(500).json({ message: "something went wrong" });
     });
 });
-app.get("/api/getAvailableTeleConsultVendors", (req, res) => {
+app.get("/api/findVendorsForTeleConsult", (req, res) => {
   const { sort, order, page, perPage } = req.query;
   const sortOrder = {
     [sort || "rating"]: order === "asc" ? 1 : -1,
@@ -1109,7 +1139,7 @@ app.get("/api/getAvailableTeleConsultVendors", (req, res) => {
     { $sort: sortOrder },
     {
       $facet: {
-        medicines: [
+        vendors: [
           { $skip: +perPage * (+(page || 1) - 1) },
           { $limit: +(perPage || 20) },
         ],
@@ -1145,6 +1175,115 @@ app.post("/api/bookTeleConsult", (req, res) => {
     });
 });
 
+app.patch("/api/updateChatTimeslots", (req, res) => {
+  Vendor.findOneAndUpdate({ _id: req.body._id }, { "chat.days": req.body.days })
+    .then((dbRes) => {
+      res.json({ message: "hours updated" });
+    })
+    .catch((err) => {
+      console.log(err);
+      res.status(500).json({ message: "something went wrong" });
+    });
+});
+app.get("/api/findVendorsForChat", (req, res) => {
+  const { sort, order, page, perPage } = req.query;
+  const sortOrder = {
+    [sort || "rating"]: order === "asc" ? 1 : -1,
+  };
+  Vendor.aggregate([
+    {
+      $match: {
+        "chat.available": true,
+      },
+    },
+    {
+      $lookup: {
+        from: "chats",
+        as: "chatBookings",
+        pipeline: [],
+      },
+    },
+    {
+      $set: {
+        "chat.days": {
+          $map: {
+            input: "$chat.days",
+            as: "day",
+            in: {
+              _id: "$$day._id",
+              day: "$$day.day",
+              hours: "$$day.hours",
+              bookings: {
+                $filter: {
+                  input: "$chatBookings",
+                  as: "book",
+                  cond: {
+                    $and: [
+                      {
+                        $eq: ["$$book.vendor", "$_id"],
+                      },
+                      {
+                        $eq: ["$$book.completed", false],
+                      },
+                      {
+                        $eq: [
+                          {
+                            $dayOfWeek: "$$book.date",
+                          },
+                          "$$day.day",
+                        ],
+                      },
+                    ],
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    {
+      $unset: "chatBookings",
+    },
+    { $sort: sortOrder },
+    {
+      $facet: {
+        vendors: [
+          { $skip: +perPage * (+(page || 1) - 1) },
+          { $limit: +(perPage || 20) },
+        ],
+        pageInfo: [{ $group: { _id: null, count: { $sum: 1 } } }],
+      },
+    },
+  ])
+    .then((dbRes) => {
+      res.json(dbRes);
+    })
+    .catch((err) => {
+      console.log(err);
+      res.status(500).json({ message: "something went wrong" });
+    });
+});
+app.post("/api/bookChat", (req, res) => {
+  const { date, vendor, token, user, charge, sessionLength } = req.body;
+  new Chat({
+    token,
+    date,
+    vendor,
+    user,
+    charge,
+    sessionLength,
+  })
+    .save()
+    .then((dbRes) => {
+      res.json(dbRes);
+    })
+    .catch((err) => {
+      console.log(err);
+      res.status(500).json({ message: "something went wrong" });
+    });
+});
+
 app.post("/api/addMedicine", (req, res) => {
   new Medicine({
     ...req.body,
@@ -1155,7 +1294,7 @@ app.post("/api/addMedicine", (req, res) => {
     })
     .catch((err) => {
       console.log(err);
-      res.status(500).json({ message: "something went worng" });
+      res.status(500).json({ message: "something went wrong" });
     });
 });
 app.get("/api/findMedicine", (req, res) => {
@@ -1164,7 +1303,7 @@ app.get("/api/findMedicine", (req, res) => {
     [sort || "popularity"]: order === "asc" ? 1 : -1,
   };
   const query = {
-    ...(name && { name }),
+    ...(name && { name: new RegExp(name, "gi") }),
     ...(brand && { brand }),
     ...(price && {
       price: { $gt: +price.split("-")[0], $lt: +price.split("-")[1] },
@@ -1248,7 +1387,18 @@ app.post("/api/placeOrder", (req, res) => {
   })
     .save()
     .then((order) => {
-      res.json("order has been placed");
+      if (order) {
+        res.json("order has been placed");
+        order.products.forEach(async (item) => {
+          await Medicine.findById(item._id).then((dbProduct) =>
+            Medicine.findByIdAndUpdate(dbProduct._id, {
+              available: dbProduct.available - item.qty,
+            })
+          );
+        });
+      } else {
+        res.status(500).json({ message: "something went wrong" });
+      }
     })
     .catch((err) => {
       console.log(err);
@@ -1278,33 +1428,41 @@ app.get("/api/getOrders", (req, res) => {
         },
       },
     }),
+    ...(paid && { paid: paid === "true" }),
+    ...(approved && { paid: approved === "true" }),
+    ...(shipped && { paid: shipped === "true" }),
+    ...(delivered && { paid: delivered === "true" }),
   };
   const sortOrder = {
     [sort || "age"]: order === "asc" ? 1 : -1,
   };
-  mongoose
-    .aggregate([
-      {
-        $lookup: {
-          from: "medicines",
-          localField: "products.product",
-          foreignField: "_id",
-          as: "string",
-        },
+  Order.aggregate([
+    { $match: query },
+    {
+      $lookup: {
+        from: "medicines",
+        localField: "products.product",
+        foreignField: "_id",
+        as: "string",
       },
-      { $sort: sortOrder },
-      {
-        $facet: {
-          vendors: [
-            { $skip: +perPage * (+(page || 1) - 1) },
-            { $limit: +(perPage || 20) },
-          ],
-          pageInfo: [{ $group: { _id: null, count: { $sum: 1 } } }],
-        },
+    },
+    { $sort: sortOrder },
+    {
+      $facet: {
+        orders: [
+          { $skip: +perPage * (+(page || 1) - 1) },
+          { $limit: +(perPage || 20) },
+        ],
+        pageInfo: [{ $group: { _id: null, count: { $sum: 1 } } }],
       },
-    ])
+    },
+  ])
     .then((orders) => {
       res.json({ orders });
+    })
+    .catch((err) => {
+      console.log(err);
+      res.status(500).json({ message: "something went wrong" });
     });
 });
 app.patch("/api/approveOrder", (req, res) => {
@@ -1322,6 +1480,28 @@ app.patch("/api/updateOrder", (req, res) => {
   Order.findByIdAndUpdate(req.body._id, { ...req.body })
     .then((dbRes) => {
       res.json({ message: "order updated" });
+    })
+    .catch((err) => {
+      console.log(err);
+      res.status(500).json({ message: "something went wrong" });
+    });
+});
+app.patch("/api/orderDelivered", (req, res) => {
+  Order.findByIdAndUpdate(req.body._id, { delivered: true })
+    .then((dbRes) => {
+      res.json({ message: "successfully updated" });
+      NotificationSubscription.findById(dbRes.customer).then((subscription) => {
+        webPush.sendNotification(
+          subscription,
+          JSON.stringify({
+            title: "Your product has been delivered",
+            body: "Click here to review your experience.",
+          })
+        );
+      });
+      dbRes.tests.forEach(async (product) => {
+        await new Sale({ product: product._id, qty: product.qty }).save();
+      });
     })
     .catch((err) => {
       console.log(err);
@@ -1349,11 +1529,19 @@ app.patch("/api/updateDiagnostic", (req, res) => {
     })
     .catch((err) => {
       console.log(err);
-      res.status(500).json({ message: "something went worng" });
+      res.status(500).json({ message: "something went wrong" });
     });
 });
-app.get("/api/getDiagnostics", (req, res) => {
-  const { q, page, perPage, userLocation, sort, order } = req.query;
+app.get("/api/findDiagnostics", (req, res) => {
+  const {
+    q,
+    page,
+    perPage,
+    userLocation,
+    sort,
+    order,
+    maxDistance,
+  } = req.query;
   const query = {
     ...(q && {
       $or: [{ name: { $regex: new RegExp(q, "gi") } }],
@@ -1379,7 +1567,7 @@ app.get("/api/getDiagnostics", (req, res) => {
               },
               spherical: true,
               distanceField: "distance",
-              key: "chambers.location",
+              key: "address.location",
               maxDistance: maxDistance || 200000000,
             },
           },
@@ -1391,7 +1579,7 @@ app.get("/api/getDiagnostics", (req, res) => {
         distance: 1,
         available: 1,
         name: 1,
-        bookings: { $size: { $ifNull: ["$bookings", []] } },
+        popularity: { $size: { $ifNull: ["$bookings", []] } },
         price: 1,
         discount: 1,
         keywords: 1,
@@ -1400,7 +1588,7 @@ app.get("/api/getDiagnostics", (req, res) => {
     { $sort: sortOrder },
     {
       $facet: {
-        vendors: [
+        diagnostics: [
           { $skip: +perPage * (+(page || 1) - 1) },
           { $limit: +(perPage || 20) },
         ],
@@ -1456,10 +1644,13 @@ app.patch("/api/diagnosticCompleted", (req, res) => {
         webPush.sendNotification(
           subscription,
           JSON.stringify({
-            title: "Test result has been deliverd",
-            body: "Click this link to review experience.",
+            title: "Test result has been delivered",
+            body: "Click here to review your experience.",
           })
         );
+      });
+      dbRes.tests.forEach(async (diagnostic) => {
+        await new Sale({ product: diagnostic._id, qty: 1 }).save();
       });
     })
     .catch((err) => {
@@ -1469,21 +1660,21 @@ app.patch("/api/diagnosticCompleted", (req, res) => {
 });
 
 // temporary api
-app.post("/api/postSales", (req, res) => {
-  new Sales({
-    product: req.body._id,
-    qty: req.body.qty,
-  })
-    .save()
-    .then((dbRes) => {
-      res.json("done");
-      Medicine.updateSale(req.body._id, dbRes._id);
-    })
-    .catch((err) => {
-      console.log(err);
-      res.status(500).json({ message: "something went wrong" });
-    });
-});
+// app.post("/api/postSales", (req, res) => {
+//   new Sales({
+//     product: req.body._id,
+//     qty: req.body.qty,
+//   })
+//     .save()
+//     .then((dbRes) => {
+//       res.json("done");
+//       Medicine.updateSale(req.body._id, dbRes._id);
+//     })
+//     .catch((err) => {
+//       console.log(err);
+//       res.status(500).json({ message: "something went wrong" });
+//     });
+// });
 
 // this funciton stats an interval that runs every 1 minutes,
 // finds any appointment between 9 and 10 minutes
@@ -1529,7 +1720,7 @@ app.post("/subscribe", (req, res) => {
       res.status(500).json({ message: "something went wrong" });
     });
 });
-app.post("/unsubscribe", (req, res) => {
+app.delete("/unsubscribe", (req, res) => {
   NotificationSubscription.findByIdAndDelete(req.body._id)
     .then((dbRes) => {
       res.status(200).json({ message: "successfully unsubscribed" });

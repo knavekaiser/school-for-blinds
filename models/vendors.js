@@ -223,6 +223,22 @@ const teleConsultModel = new Schema(
 );
 global.TeleConsult = mongoose.model("TeleConsult", teleConsultModel);
 
+const chatModel = new Schema(
+  {
+    token: { type: Number, required: true },
+    date: { type: Date, required: true },
+    vendor: { type: Schema.Types.ObjectId, ref: "vendors", required: true },
+    user: { type: Schema.Types.ObjectId, ref: "users", required: true },
+    charge: { type: Number },
+    sessionLength: { type: Number, required: true },
+    paid: { type: Boolean, default: false },
+    completed: { type: Boolean, default: false },
+    cancelled: { type: Boolean, default: false },
+  },
+  { timestamps: true }
+);
+global.CeleConsult = mongoose.model("ChatModel", chatModel);
+
 const assistantModel = new Schema({
   name: { type: String, required: true },
   canApproveAppointments: { type: Boolean, default: false },

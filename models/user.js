@@ -27,10 +27,10 @@ const userModel = new Schema({
   email: { type: String, unique: true, sparse: true },
   pass: { type: String },
   gender: { type: String },
-  appointments: [{ type: Schema.Types.ObjectId, ref: "User", required: true }],
+  appointments: [{ type: Schema.Types.ObjectId, ref: "Book", required: true }],
   status: { type: String, default: "basic" },
 });
-userModel.statics.updateBooking = (_id) => {
+userModel.statics.updateAppointments = (_id) => {
   if (!ObjectId.isValid(_id)) return;
   return Book.find({ user: _id }, "_id").then((allBookings) =>
     User.findByIdAndUpdate(_id, {

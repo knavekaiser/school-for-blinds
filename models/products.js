@@ -4,7 +4,7 @@ const medicineModel = new Schema(
     genericName: { type: String },
     dscr: { type: String },
     brand: { type: String, required: true },
-    price: { type: Number },
+    price: { type: Number, required: true },
     prescriptionRequired: { type: Boolean, default: false },
     available: { type: Number, default: 0 },
     discount: {
@@ -15,7 +15,7 @@ const medicineModel = new Schema(
     sales: [
       {
         type: Schema.Types.ObjectId,
-        ref: "Sales",
+        ref: "Sale",
       },
     ],
     images: [{ type: String }],
@@ -88,7 +88,7 @@ const orderModel = new Schema(
 global.Order = mongoose.model("Order", orderModel);
 
 const diagnosticModel = new Schema({
-  name: { type: String },
+  name: { type: String, required: true },
   address: {
     street: { type: String },
     city: { type: String },
@@ -98,7 +98,7 @@ const diagnosticModel = new Schema({
       coordinates: [{ type: Number }, { type: Number }],
     },
   },
-  price: { type: Number },
+  price: { type: Number, required: true },
   discount: {
     type: { type: Number, enum: ["flat", "percent"] },
     amount: { type: Number },
@@ -107,7 +107,7 @@ const diagnosticModel = new Schema({
   sales: [
     {
       type: Schema.Types.ObjectId,
-      ref: "Sales",
+      ref: "Sale",
     },
   ],
   available: { type: Boolean, default: true },
@@ -176,7 +176,6 @@ const salesModel = new Schema(
   {
     product: {
       type: Schema.Types.ObjectId,
-      ref: "medicineModel",
       required: true,
     },
     qty: { type: Number, required: true },
