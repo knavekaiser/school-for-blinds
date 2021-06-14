@@ -1564,9 +1564,17 @@ io.on("connection", async (socket) => {
   const target = socket.handshake.query.target;
   if (type === "vendor") {
     socket.join(_id);
-    console.log({ _id });
   } else {
     socket.join(target);
     io.to(target).emit("connected");
+    // io.broadcast.to(target).emit("connected");
+    // clients on "connected" puts the target
+    // into query params of next requst
   }
+  socket.on("newMessage", (payload) => {
+    io.to(socket.handshake.query.room).emit("newData", {
+      user: payload.id,
+      message: payload.message,
+    });
+  });
 });
