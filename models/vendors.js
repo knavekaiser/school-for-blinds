@@ -27,7 +27,15 @@ const vendorModel = new Schema(
     pass: { type: String },
     keywords: [{ type: String }],
     bookings: [{ type: Schema.Types.ObjectId, ref: "Book", required: true }],
-    assistants: [{ type: Schema.Types.ObjectId, ref: "" }],
+    assistants: [
+      {
+        profile: {
+          type: Schema.Types.ObjectId,
+          ref: "Assistant",
+        },
+        canApproveAppointments: { type: Boolean, default: false },
+      },
+    ],
     available: { type: Boolean, default: true },
     speciality: [{ type: String, required: true }],
     chambers: [
@@ -106,13 +114,45 @@ vendorModel.statics.updateBooking = (_id) => {
   );
 };
 vendorModel.statics.addFeedback = ({ vendor, rating, feedback, user }) => {
-  return Vendor.findById(vendor).then((vendor) => {
-    const newFeedbacks = [...vendor.rating.reviews, { rating, user, feedback }];
+  return Book.findOne({ vendor, user, completed: true }).then(
+    (bookCompleted) => {
+      if (bookCompleted) {
+        return Vendor.findById(vendor).then((vendor) => {
+          const newFeedbacks = [
+            ...vendor.rating.reviews.filter(
+              (review) => review.user.toString() !== user.toString()
+            ),
+            { rating, user, feedback },
+          ];
+          const newTotalRating =
+            newFeedbacks.reduce((a, c) => {
+              return a + c.rating;
+            }, 0) / newFeedbacks.length;
+          return Vendor.findByIdAndUpdate(vendor._id, {
+            rating: {
+              totalRating: newTotalRating,
+              reviews: newFeedbacks,
+            },
+          });
+        });
+      } else {
+        throw "forbidden";
+      }
+    }
+  );
+};
+vendorModel.statics.deleteFeedback = ({ vendor, user }) => {
+  return Vendor.findById(vendor).then((dbVendor) => {
+    const newFeedbacks = [
+      ...dbVendor.rating.reviews.filter(
+        (review) => review.user.toString() !== user.toString()
+      ),
+    ];
     const newTotalRating =
       newFeedbacks.reduce((a, c) => {
         return a + c.rating;
-      }, 0) / newFeedbacks.length;
-    return Vendor.findByIdAndUpdate(vendor._id, {
+      }, 0) / newFeedbacks.length || 0;
+    return Vendor.findByIdAndUpdate(vendor, {
       rating: {
         totalRating: newTotalRating,
         reviews: newFeedbacks,
@@ -176,22 +216,17 @@ const prescirptionModel = new Schema(
       {
         name: { type: String },
         brand: { type: String },
-        timeLine: {
+        timePeriod: {
           from: { type: Date },
           to: { type: Date },
         },
-        timesToTake: [
-          {
-            type: String,
-          },
-        ],
+        instruction: { type: String },
       },
     ],
   },
   { timestamps: true }
 );
-
-const Prescription = mongoose.model("Prescription", prescirptionModel);
+global.Prescription = mongoose.model("Prescription", prescirptionModel);
 
 const blogModel = new Schema(
   {
@@ -237,11 +272,32 @@ const chatModel = new Schema(
   },
   { timestamps: true }
 );
-global.CeleConsult = mongoose.model("ChatModel", chatModel);
+global.Chat = mongoose.model("Chat", chatModel);
 
 const assistantModel = new Schema({
   name: { type: String, required: true },
-  canApproveAppointments: { type: Boolean, default: false },
+  email: { type: String },
+  phone: { type: String },
+  pass: { type: String },
+  vendor: { type: Schema.Types.ObjectId, ref: "Vendor" },
+  gender: { type: String },
+  age: { type: String },
+  address: {
+    street: { type: String },
+    city: { type: String },
+    state: { type: String },
+    location: {
+      type: {
+        type: String,
+        enum: ["Point"],
+      },
+      coordinates: {
+        type: [Number],
+      },
+    },
+  },
+  approved: { type: Boolean, default: false },
+  employeeId: { type: String, required: true },
 });
 global.Assistant = mongoose.model("Assistant", assistantModel);
 

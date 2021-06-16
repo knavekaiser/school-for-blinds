@@ -29,6 +29,16 @@ const userModel = new Schema({
   gender: { type: String },
   appointments: [{ type: Schema.Types.ObjectId, ref: "Book", required: true }],
   status: { type: String, default: "basic" },
+  medicalRecords: {
+    nextVisit: {
+      vendor: { type: Schema.Types.ObjectId, ref: "Vendor" },
+      date: { type: Date },
+      appointmentBooked: { type: Boolean, default: false },
+    },
+    prescriptions: [{ type: Schema.Types.ObjectId, ref: "Prescription" }],
+    reports: [{ type: String }],
+    otherData: [{ type: String }],
+  },
 });
 userModel.statics.updateAppointments = (_id) => {
   if (!ObjectId.isValid(_id)) return;
@@ -37,6 +47,14 @@ userModel.statics.updateAppointments = (_id) => {
       appointments: allBookings.map((item) => item._id),
     })
   );
+};
+userModel.statics.updatePrescription = (_id) => {
+  if (!ObjectId.isValid(_id)) return;
+  return Prescription.find({ user: _id }).then((prescriptions) => {
+    User.findByIdAndUpdate(_id, {
+      "medicalRecords.prescriptions": prescriptions.map((item) => item._id),
+    }).then((dbRes) => {});
+  });
 };
 
 global.User = mongoose.model("User", userModel);

@@ -1,5 +1,6 @@
 const medicineModel = new Schema(
   {
+    vendor: { type: Schema.Types.ObjectId, ref: "Vendor", required: true },
     name: { type: String, required: true },
     genericName: { type: String },
     dscr: { type: String },
@@ -10,6 +11,7 @@ const medicineModel = new Schema(
     discount: {
       type: { type: Number, enum: ["flat", "percent"] },
       amount: { type: Number },
+      max: { type: Number },
       dscr: { type: String },
     },
     sales: [
@@ -70,18 +72,21 @@ const orderModel = new Schema(
         qty: { type: Number, default: 1 },
       },
     ],
+    vendor: { type: Schema.Types.ObjectId, ref: "Vendor", required: true },
     total: { type: Number, required: true },
     discount: {
       type: { type: Number, enum: ["flat", "percent"] },
       amount: { type: Number },
+      max: { type: Number },
       dsrc: { type: String },
     },
     approved: { type: Boolean, default: false },
     shipped: { type: Boolean, default: false },
     delivered: { type: Boolean, default: false },
     paid: { type: Boolean, default: false },
+    cancelled: { type: Boolean, default: false },
+    prescriptions: [{ type: String }],
     customer: { type: Schema.Types.ObjectId, ref: "User" },
-    status: { type: String, default: "pending" },
   },
   { timestamps: true }
 );
@@ -102,6 +107,7 @@ const diagnosticModel = new Schema({
   discount: {
     type: { type: Number, enum: ["flat", "percent"] },
     amount: { type: Number },
+    max: { type: Number },
     dscr: { type: String },
   },
   sales: [
@@ -121,6 +127,8 @@ const diagnosticModel = new Schema({
       },
     ],
   },
+  vendor: { type: Schema.Types.ObjectId, ref: "Vendor" },
+  dscr: { type: String },
 });
 diagnosticModel.statics.updateSale = (_id, sale_id) => {
   return Sales.find({ product: _id }, "_id").then((sales) =>
@@ -150,11 +158,13 @@ global.Diagnostic = mongoose.model("Diagnostic", diagnosticModel);
 
 const diagnosticBookingModel = new Schema(
   {
+    vendor: { type: Schema.Types.ObjectId, ref: "Vendor" },
     tests: [{ type: Schema.Types.ObjectId, ref: "Diagnostic" }],
     total: { type: Number },
     discount: {
       type: { type: Number, enum: ["flat", "percent"] },
       amount: { type: Number },
+      max: { type: Number },
       dscr: { type: String },
     },
     customer: { type: Schema.Types.ObjectId, ref: "User" },
@@ -182,4 +192,4 @@ const salesModel = new Schema(
   },
   { timestamps: true }
 );
-global.Sales = mongoose.model("Sales", salesModel);
+global.Sale = mongoose.model("Sales", salesModel);
