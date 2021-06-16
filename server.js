@@ -59,18 +59,18 @@ app.put(
   "/api/assignAsstToVendor",
   passport.authenticate("vendorPrivate"),
   (req, res) => {
-    const { vendor, asst } = req.body;
-    Promise.all([
-      Vendor.findOne({ _id: vendor }),
-      Assistant.findOne({ _id: asst }),
-    ])
-      .then(([vendor, asst]) => {
-        if (vendor && asst) {
+    const { asst } = req.body;
+    const vendor = req.user;
+    Assistant.findOne({
+      $or: [{ email: asst }, { phone: asst }],
+    })
+      .then((dbAsst) => {
+        if (dbAsst) {
           const newAssts = [
             ...vendor.assistants.filter(
               (asst) => asst.profile.toString() === asst.toString()
             ),
-            { profile: asst._id, canApproveAppointments: false },
+            { profile: dbAsst._id, canApproveAppointments: false },
           ];
           return Promise.all([
             Vendor.findOneAndUpdate(
@@ -78,7 +78,7 @@ app.put(
               { assistants: newAssts }
             ),
             Assistant.findOneAndUpdate(
-              { _id: asst._id },
+              { _id: dbAsst._id },
               { vendor: vendor._id }
             ),
           ]);
@@ -109,12 +109,10 @@ app.put(
   "/api/removeAsstFromVendor",
   passport.authenticate("vendorPrivate"),
   (req, res) => {
-    const { vendor, asst } = req.body;
-    Promise.all([
-      Vendor.findOne({ _id: vendor }),
-      Assistant.findOne({ _id: asst }),
-    ])
-      .then(([vendor, asst]) => {
+    const { asst } = req.body;
+    const vendor = req.user;
+    Assistant.findOne({ _id: asst })
+      .then((asst) => {
         if (vendor && asst) {
           const newAssts = [
             ...vendor.assistants.filter(
