@@ -54,29 +54,33 @@ app.delete(
       });
   }
 );
-app.get("/api/getPrescriptions", (req, res) => {
-  const { vendor, user, date, page, perPage } = req.query;
-  const query = {
-    ...(vendor && { vendor: ObjectId(vendor) }),
-    ...(user && { user: ObjectId(user) }),
-  };
-  Prescription.aggregate([
-    { $match: query },
-    {
-      $facet: {
-        prescriptions: [
-          { $skip: +perPage * (+(page || 1) - 1) },
-          { $limit: +(perPage || 20) },
-        ],
-        pageInfo: [{ $group: { _id: null, count: { $sum: 1 } } }],
+app.get(
+  "/api/getPrescriptions",
+  passport.authenticate("asstPrivate"),
+  (req, res) => {
+    const { vendor, user, date, page, perPage } = req.query;
+    const query = {
+      ...(vendor && { vendor: ObjectId(vendor) }),
+      ...(user && { user: ObjectId(user) }),
+    };
+    Prescription.aggregate([
+      { $match: query },
+      {
+        $facet: {
+          prescriptions: [
+            { $skip: +perPage * (+(page || 1) - 1) },
+            { $limit: +(perPage || 20) },
+          ],
+          pageInfo: [{ $group: { _id: null, count: { $sum: 1 } } }],
+        },
       },
-    },
-  ])
-    .then((dbRes) => {
-      res.json(dbRes);
-    })
-    .catch((err) => {
-      console.log(err);
-      res.json({ message: "something went wrong" });
-    });
-});
+    ])
+      .then((dbRes) => {
+        res.json(dbRes);
+      })
+      .catch((err) => {
+        console.log(err);
+        res.json({ message: "something went wrong" });
+      });
+  }
+);

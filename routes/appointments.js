@@ -376,7 +376,7 @@ app.patch(
 );
 
 app.patch(
-  "/api/cancelAnAppointment",
+  "/api/cancelAnAppointmentUser",
   passport.authenticate("userPrivate"),
   (req, res) => {
     Book.findOneAndUpdate(
@@ -410,7 +410,7 @@ app.patch(
   }
 );
 app.patch(
-  "/api/cancelAnAppointment",
+  "/api/cancelAnAppointmentVendor",
   passport.authenticate("vendorPrivate"),
   (req, res) => {
     Book.findOneAndUpdate(
@@ -448,7 +448,7 @@ app.patch(
   }
 );
 app.patch(
-  "/api/cancelAnAppointment",
+  "/api/cancelAnAppointmentAsst",
   passport.authenticate("asstPrivate"),
   (req, res) => {
     Book.findOne({ _id: req.body._id, completed: false })
