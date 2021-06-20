@@ -288,6 +288,62 @@ app.patch(
   }
 );
 
+app.post(
+  "/api/payForTeleConsult",
+  passport.authenticate("userPrivate"),
+  (req, res) => {
+    const { amount, paymentMethod, teleConsult } = req.body;
+    // users give all their payment info in the request body.
+    // payment api gets called with those detail.
+    // return status code 200 and a transaction id in case
+    // of a successful transaction
+    if (200) {
+      new PaymentLedger({
+        type: "collection",
+        user: req.user._id,
+        amount,
+        paymentMethod,
+        note: "payment for tele consult", // specific for this route
+        transactionId: "415422205125422105120", // from payment gateway
+        product: teleConsult,
+      })
+        .save()
+        .then((dbRes) => {
+          if (dbRes) {
+            return TeleConsult.findOneAndUpdate(
+              { _id: teleConsult },
+              { paid: true }
+            );
+          } else {
+            return null;
+          }
+        })
+        .then((update) => {
+          if (update) {
+            res.json({ message: "payment successful" });
+          } else {
+            res.status(400).json({ message: "something went wrong" });
+          }
+        })
+        .catch((err) => {
+          if (err.code === 11000) {
+            res.status(400).json({
+              message: "transaction id found in the database",
+              code: err.code,
+              field: Object.keys(err.keyValue)[0],
+            });
+          } else {
+            console.log(err);
+            res.status(500).json({ message: "something went wrong" });
+          }
+        });
+    } else {
+      // send different error based on the payment gateway error
+      res.status(500).json({ message: "something went wrong" });
+    }
+  }
+);
+
 app.get(
   "/api/getAllTeleConsultsVendor",
   passport.authenticate("vendorPrivate"),

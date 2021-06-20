@@ -56,7 +56,7 @@ app.get("/api/findDiagnostics", (req, res) => {
     }),
   };
   const sortOrder = {
-    ...(sort && { sort: order === "asc" ? 1 : -1 }),
+    ...(sort && { [sort || "popularity"]: order === "asc" ? 1 : -1 }),
     ...(userLocation
       ? { distance: -1 }
       : { bookings: order === "asc" ? 1 : -1 }),
@@ -326,5 +326,61 @@ app.patch(
         console.log(err);
         res.status(500).json({ message: "something went wrong" });
       });
+  }
+);
+
+app.post(
+  "/api/payForDiagnostic",
+  passport.authenticate("userPrivate"),
+  (req, res) => {
+    const { amount, paymentMethod, diagnostic } = req.body;
+    // users give all their payment info in the request body.
+    // payment api gets called with those detail.
+    // return status code 200 and a transaction id in case
+    // of a successful transaction
+    if (200) {
+      new PaymentLedger({
+        type: "collection",
+        user: req.user._id,
+        amount,
+        paymentMethod,
+        note: "payment for diagnostics", // specific for this route
+        transactionId: "415425125422105120", // from payment gateway
+        product: diagnostic,
+      })
+        .save()
+        .then((dbRes) => {
+          if (dbRes) {
+            return DiagnosticBooking.findOneAndUpdate(
+              { _id: diagnostic },
+              { paid: true }
+            );
+          } else {
+            return null;
+          }
+        })
+        .then((update) => {
+          if (update) {
+            res.json({ message: "payment successful" });
+          } else {
+            res.status(400).json({ message: "something went wrong" });
+          }
+        })
+        .catch((err) => {
+          if (err.code === 11000) {
+            res.status(400).json({
+              message: "transaction id found in the database",
+              code: err.code,
+              field: Object.keys(err.keyValue)[0],
+            });
+          } else {
+            console.log(err);
+            res.status(500).json({ message: "something went wrong" });
+          }
+        });
+    } else {
+      // send different error based on the payment gateway error
+      res.status(500).json({ message: "something went wrong" });
+    }
   }
 );

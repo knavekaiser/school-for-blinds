@@ -10,8 +10,9 @@ global.ObjectId = require("mongodb").ObjectId;
 require("./models/user");
 require("./models/vendors");
 require("./models/products");
+require("./models/ledger");
 require("dotenv").config();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3002;
 const URI = process.env.MONGO_URI;
 const path = require("path");
 
@@ -143,6 +144,17 @@ app.put(
       });
   }
 );
+app.post("/api/contactUsRequest", (req, res) => {
+  new ContactUs({ ...req.body })
+    .save()
+    .then((dbRes) => {
+      res.json({ message: "request submitted" });
+    })
+    .catch((err) => {
+      console.log(err);
+      res.status(500).json({ message: "something went wrong" });
+    });
+});
 
 require("./routes/vendor.js");
 
@@ -152,48 +164,43 @@ app.get("/api/logout", (req, res) => {
 });
 
 // ------------------------------------------------------- OAuth
-app.get(
-  "/api/auth/google",
-  passport.authenticate("vendorGoogle", { scope: ["profile", "email"] })
-);
-app.get(
-  "/googleAuthcalllback",
-  passport.authenticate("vendorGoogle", {
-    session: false,
-    failWithError: true,
-  }),
-  handleSignIn,
-  (err, req, res, next) => {
-    res.status(401).json({ code: 401, message: "invalid credentials" });
-  }
-);
-app.get("/api/auth/facebook", passport.authenticate("vendorFacebook"));
-app.get(
-  "/facebookAuthCallback",
-  passport.authenticate("vendorFacebook", {
-    session: false,
-    failWithError: true,
-  }),
-  handleSignIn,
-  (err, req, res, next) => {
-    res.status(401).json({ code: 401, message: "invalid credentials" });
-  }
-);
+// app.get(
+//   "/api/auth/google",
+//   passport.authenticate("vendorGoogle", { scope: ["profile", "email"] })
+// );
+// app.get(
+//   "/googleAuthcalllback",
+//   passport.authenticate("vendorGoogle", {
+//     successRedirect: "/",
+//     failureRedirect: "/login",
+//   }),
+//   handleSignIn
+// );
+// app.get("/api/auth/facebook", passport.authenticate("vendorFacebook"));
+// app.get(
+//   "/facebookAuthCallback",
+//   passport.authenticate("vendorFacebook", {
+//     successRedirect: "/",
+//     failureRedirect: "/login",
+//   }),
+//   handleSignIn,
+//   (err, req, res, next) => {
+//     res.status(401).json({ code: 401, message: "invalid credentials" });
+//   }
+// );
 
-app.post("/api/addSpeciality", (req, res) => {
-  new Speciality({
-    name: req.body.name,
-    symptoms: req.body.symptoms,
-  })
-    .save()
-    .then((dbRes) => {
-      res.json({ message: "speciality added" });
-    })
-    .catch((err) => {
-      console.log(err);
-      res.status(500).json({ message: "something went wrong" });
-    });
-});
+require("./routes/appointments.js");
+
+require("./routes/medicalRecords.js");
+
+require("./routes/teleConsult.js");
+
+require("./routes/chat.js");
+
+require("./routes/pharmacy.js");
+
+require("./routes/diagnostic.js");
+
 app.get("/api/getSpeciality", (req, res) => {
   // WARNING: this aggregate pipeline only works in mogodb Atlas
   // Speciality.aggregate([
@@ -240,18 +247,6 @@ app.get("/api/getSpeciality", (req, res) => {
       res.status(500).json({ message: "something went wrong" });
     });
 });
-
-require("./routes/appointments.js");
-
-require("./routes/medicalRecords.js");
-
-require("./routes/teleConsult.js");
-
-require("./routes/chat.js");
-
-require("./routes/pharmacy.js");
-
-require("./routes/diagnostic.js");
 
 // this funciton stats an interval that runs a function every 1 minutes,
 // which finds any appointment between 9 and 10 minutes

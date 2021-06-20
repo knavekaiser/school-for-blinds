@@ -21,7 +21,7 @@ app.get("/api/findVendors", (req, res) => {
         { keywords: { $in: [new RegExp(q, "gi")] } },
       ],
     }),
-    ...(type && { type }),
+    ...(type ? { type } : { $or: [{ type: "Doctor" }, { type: "Clinic" }] }),
     ...(gender && { gender }),
     ...(speciality && { speciality: new RegExp(speciality, "gi") }),
     ...(education && { education: new RegExp(education, "gi") }),
@@ -29,9 +29,10 @@ app.get("/api/findVendors", (req, res) => {
     ...(onlineBooking && { onlineBooking: onlineBooking === "true" }),
   };
   const sortOrder = {
-    ...(sort && { sort: order === "asc" ? 1 : -1 }),
+    ...(sort && { [sort || "popularity"]: order === "asc" ? 1 : -1 }),
     ...(userLocation ? { distance: -1 } : { age: order === "asc" ? 1 : -1 }),
   };
+  console.log(sortOrder);
   const pipeline = [
     ...(userLocation
       ? [
@@ -372,6 +373,59 @@ app.patch(
       .catch((err) => {
         res.status(500).json({ message: "something went wrong" });
       });
+  }
+);
+
+app.post(
+  "/api/payForAppointment",
+  passport.authenticate("userPrivate"),
+  (req, res) => {
+    const { amount, paymentMethod, appointment } = req.body;
+    // users give all their payment info in the request body.
+    // payment api gets called with those detail.
+    // return status code 200 and a transaction id in case
+    // of a successful transaction
+    if (200) {
+      new PaymentLedger({
+        type: "collection",
+        user: req.user._id,
+        amount,
+        paymentMethod,
+        note: "payment for appointment", // specific for this route
+        transactionId: "415420512021054105120", // from payment gateway
+        product: appointment,
+      })
+        .save()
+        .then((dbRes) => {
+          if (dbRes) {
+            return Book.findOneAndUpdate({ _id: appointment }, { paid: true });
+          } else {
+            return null;
+          }
+        })
+        .then((update) => {
+          if (update) {
+            res.json({ message: "payment successful" });
+          } else {
+            res.status(400).json({ message: "something went wrong" });
+          }
+        })
+        .catch((err) => {
+          if (err.code === 11000) {
+            res.status(400).json({
+              message: "transaction id found in the database",
+              code: err.code,
+              field: Object.keys(err.keyValue)[0],
+            });
+          } else {
+            console.log(err);
+            res.status(500).json({ message: "something went wrong" });
+          }
+        });
+    } else {
+      // send different error based on the payment gateway error
+      res.status(500).json({ message: "something went wrong" });
+    }
   }
 );
 

@@ -16,7 +16,6 @@ const vendorModel = new Schema(
       ],
     },
     about: { type: String },
-    onlineBooking: { type: Boolean, default: true },
     phone: {
       type: String,
       trim: true,
@@ -26,82 +25,13 @@ const vendorModel = new Schema(
     email: { type: String, unique: true, sparse: true },
     pass: { type: String },
     keywords: [{ type: String }],
-    bookings: [{ type: Schema.Types.ObjectId, ref: "Book", required: true }],
-    assistants: [
-      {
-        profile: {
-          type: Schema.Types.ObjectId,
-          ref: "Assistant",
-        },
-        canApproveAppointments: { type: Boolean, default: false },
-      },
-    ],
     available: { type: Boolean, default: true },
-    speciality: [{ type: String, required: true }],
-    chambers: [
-      {
-        _id: { type: Schema.Types.ObjectId, default: new ObjectId() },
-        street: { type: String, required: true },
-        city: { type: String, required: true },
-        state: { type: String, required: true },
-        zip: { type: Number, required: true },
-        charge: { type: Number, required: true },
-        open: { type: Boolean, default: true },
-        visitingDays: [
-          {
-            day: { type: Number, required: true },
-            hours: [
-              {
-                from: { type: String, required: true },
-                to: { type: String, required: true },
-              },
-            ],
-          },
-        ],
-        sessionLength: { type: Number },
-        location: {
-          type: {
-            type: String,
-            enum: ["Point"],
-          },
-          coordinates: {
-            type: [Number],
-          },
-        },
-      },
-    ],
-    chat: {
-      available: { type: Boolean, default: false },
-      charge: { type: Number },
-      sessionLength: { type: Number },
-      days: [
-        {
-          day: { type: Number, required: true },
-          hours: [
-            {
-              from: { type: String, required: true },
-              to: { type: String, required: true },
-            },
-          ],
-        },
-      ],
+    subscription: {
+      nextBillingDate: { type: Date },
+      accountStatus: { type: String, default: "trial" },
     },
-    teleConsult: {
-      available: { type: Boolean, default: false },
-      charge: { type: Number },
-      sessionLength: { type: Number },
-      days: [
-        {
-          day: { type: Number, required: true },
-          hours: [
-            {
-              from: { type: String, required: true },
-              to: { type: String, required: true },
-            },
-          ],
-        },
-      ],
-    },
+    commission: { type: Number },
+    active: { type: Boolean, default: true },
   },
   { timestamps: true, discriminatorKey: "type" }
 );
@@ -166,14 +96,171 @@ global.Vendor = mongoose.model("Vendor", vendorModel);
 global.Doctor = Vendor.discriminator(
   "Doctor",
   new Schema({
+    speciality: [{ type: String, required: true }],
+    assistants: [
+      {
+        profile: {
+          type: Schema.Types.ObjectId,
+          ref: "Assistant",
+        },
+        canApproveAppointments: { type: Boolean, default: false },
+      },
+    ],
+    bookings: [{ type: Schema.Types.ObjectId, ref: "Book", required: true }],
+    onlineBooking: { type: Boolean, default: true },
+    chambers: [
+      {
+        _id: { type: Schema.Types.ObjectId, default: new ObjectId() },
+        street: { type: String, required: true },
+        city: { type: String, required: true },
+        state: { type: String, required: true },
+        zip: { type: Number, required: true },
+        charge: { type: Number, required: true },
+        open: { type: Boolean, default: true },
+        visitingDays: [
+          {
+            day: { type: Number, required: true },
+            hours: [
+              {
+                from: { type: String, required: true },
+                to: { type: String, required: true },
+              },
+            ],
+          },
+        ],
+        sessionLength: { type: Number },
+        location: {
+          type: {
+            type: String,
+            enum: ["Point"],
+          },
+          coordinates: {
+            type: [Number],
+          },
+        },
+      },
+    ],
+    chat: {
+      onGoing: { type: Boolean, default: false },
+      available: { type: Boolean, default: false },
+      charge: { type: Number },
+      sessionLength: { type: Number },
+      days: [
+        {
+          day: { type: Number, required: true },
+          hours: [
+            {
+              from: { type: String, required: true },
+              to: { type: String, required: true },
+            },
+          ],
+        },
+      ],
+    },
+    teleConsult: {
+      onGoing: { type: Boolean, default: false },
+      available: { type: Boolean, default: false },
+      charge: { type: Number },
+      sessionLength: { type: Number },
+      days: [
+        {
+          day: { type: Number, required: true },
+          hours: [
+            {
+              from: { type: String, required: true },
+              to: { type: String, required: true },
+            },
+          ],
+        },
+      ],
+    },
     age: { type: Number, required: true },
     gender: { type: String },
     education: { type: String },
+    yearsOfExp: { type: Number },
+    verified: { type: Boolean, default: false },
   })
 );
 global.Clinic = Vendor.discriminator(
   "Clinic",
   new Schema({
+    speciality: [{ type: String, required: true }],
+    assistants: [
+      {
+        profile: {
+          type: Schema.Types.ObjectId,
+          ref: "Assistant",
+        },
+        canApproveAppointments: { type: Boolean, default: false },
+      },
+    ],
+    bookings: [{ type: Schema.Types.ObjectId, ref: "Book", required: true }],
+    onlineBooking: { type: Boolean, default: true },
+    chambers: [
+      {
+        doctor: { type: Schema.Types.ObjectId, required: true, ref: "Vendor" },
+        _id: { type: Schema.Types.ObjectId, default: new ObjectId() },
+        street: { type: String, required: true },
+        city: { type: String, required: true },
+        state: { type: String, required: true },
+        zip: { type: Number, required: true },
+        charge: { type: Number, required: true },
+        open: { type: Boolean, default: true },
+        visitingDays: [
+          {
+            day: { type: Number, required: true },
+            hours: [
+              {
+                from: { type: String, required: true },
+                to: { type: String, required: true },
+              },
+            ],
+          },
+        ],
+        sessionLength: { type: Number },
+        location: {
+          type: {
+            type: String,
+            enum: ["Point"],
+          },
+          coordinates: {
+            type: [Number],
+          },
+        },
+      },
+    ],
+    chat: {
+      available: { type: Boolean, default: false },
+      charge: { type: Number },
+      sessionLength: { type: Number },
+      days: [
+        {
+          day: { type: Number, required: true },
+          hours: [
+            {
+              from: { type: String, required: true },
+              to: { type: String, required: true },
+            },
+          ],
+        },
+      ],
+    },
+    teleConsult: {
+      available: { type: Boolean, default: false },
+      charge: { type: Number },
+      sessionLength: { type: Number },
+      days: [
+        {
+          day: { type: Number, required: true },
+          hours: [
+            {
+              from: { type: String, required: true },
+              to: { type: String, required: true },
+            },
+          ],
+        },
+      ],
+    },
     doctors: [
       {
         type: Schema.Types.ObjectId,
@@ -182,6 +269,18 @@ global.Clinic = Vendor.discriminator(
       },
     ],
   })
+);
+global.Pharmacy = Vendor.discriminator(
+  "Pharmacy",
+  new Schema({
+    deliveryStaffs: [{ type: Schema.Types.ObjectId, ref: "DeliveryStaff" }],
+    shopRegistrationNumber: { type: String },
+    categoryOfShop: { type: String },
+  })
+);
+global.DiagnosticCentre = Vendor.discriminator(
+  "DiagnosticCentre",
+  new Schema({})
 );
 
 const bookModel = new Schema(
@@ -199,12 +298,11 @@ const bookModel = new Schema(
     completed: { type: Boolean, default: false },
     cancelled: { type: Boolean, default: false },
     approved: { type: Boolean, default: false },
+    paid: { type: Boolean, default: false },
   },
   { timestamps: true }
 );
-
-const Book = mongoose.model("Book", bookModel);
-global.Book = Book;
+global.Book = mongoose.model("Book", bookModel);
 
 const prescirptionModel = new Schema(
   {
@@ -230,17 +328,15 @@ global.Prescription = mongoose.model("Prescription", prescirptionModel);
 
 const blogModel = new Schema(
   {
-    title: { type: String },
-    author: { type: Schema.Types.ObjectId, ref: "Doctor", required: true },
+    title: { type: String, required: true },
+    author: { type: String, required: true },
     topic: { type: String },
     keywords: [{ type: String }],
-    body: { type: String },
+    body: { type: String, required: true },
   },
   { timestamps: true }
 );
-
-const Blog = mongoose.model("Blog", blogModel);
-global.Blog = Blog;
+global.Blog = mongoose.model("Blog", blogModel);
 
 const teleConsultModel = new Schema(
   {
@@ -305,7 +401,6 @@ const specialityModel = new Schema({
   name: { type: String, required: true },
   symptoms: { type: String },
 });
-
 global.Speciality = mongoose.model("Speciality", specialityModel);
 
 const OTPModel = new Schema(
@@ -317,5 +412,28 @@ const OTPModel = new Schema(
   },
   { timestamp: true }
 );
-
 global.OTP = mongoose.model("OTP", OTPModel);
+
+const deliveryStaffModel = new Schema({
+  name: { type: String, required: true },
+  age: { type: String },
+  available: { type: String, default: false },
+  phone: { type: String, required: true, unique: true },
+  email: { type: String, unique: true, sparse: true },
+  address: {
+    street: { type: String },
+    city: { type: String },
+    state: { type: String },
+    zip: { type: Number },
+    location: {
+      type: {
+        type: String,
+        enum: ["Point"],
+      },
+      coordinates: {
+        type: [Number],
+      },
+    },
+  },
+});
+global.DeliveryStaff = mongoose.model("DeliveryStaff", deliveryStaffModel);

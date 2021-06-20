@@ -1,4 +1,9 @@
-const { handleSignIn, signingIn, signToken } = require("../config/passport.js");
+const {
+  handleSignIn,
+  signingIn,
+  signToken,
+  genCode,
+} = require("../config/passport.js");
 
 app.post("/api/registerAsst", (req, res) => {
   const {
@@ -66,7 +71,7 @@ app.get(
 );
 
 app.get(
-  "/api/viewAsstPrfile",
+  "/api/viewAsstProfile",
   passport.authenticate("asstPrivate"),
   (req, res) => {
     Assistant.findOne({ _id: req.user._id }, "-pass -__v")
@@ -84,7 +89,15 @@ app.patch(
   "/api/editAsstProfile",
   passport.authenticate("asstPrivate"),
   (req, res) => {
-    Assistant.findOneAndUpdate({ _id: req.user._id }, { ...req.body })
+    Assistant.findOneAndUpdate(
+      { _id: req.user._id },
+      {
+        ...req.body,
+        ...(req.body.password && {
+          pass: bcrypt.hashSync(req.body.password, 10),
+        }),
+      }
+    )
       .then((dbRes) => {
         res.json({ message: "profile updated" });
       })
@@ -239,6 +252,16 @@ app.patch("/api/asstResetPass", async (req, res) => {
       .then((dbUser) => {
         const user = JSON.parse(JSON.stringify(dbUser));
         signingIn(user, res);
+        return dbUser;
+      })
+      .then((dbUser) => {
+        if (dbUser) {
+          OTP.findByIdAndDelete(dbOtp._id).then((value) => {});
+        }
+      })
+      .catch((err) => {
+        console.log(err);
+        res.status(500).json({ message: "something went wrong" });
       });
   } else {
     if (dbOtp.attempt > 2) {

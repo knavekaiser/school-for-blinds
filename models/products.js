@@ -1,4 +1,4 @@
-const medicineModel = new Schema(
+const productModel = new Schema(
   {
     vendor: { type: Schema.Types.ObjectId, ref: "Vendor", required: true },
     name: { type: String, required: true },
@@ -31,25 +31,26 @@ const medicineModel = new Schema(
         },
       ],
     },
+    category: { type: String },
   },
   { timestamps: true }
 );
-medicineModel.statics.updateSale = (_id, sale_id) => {
+productModel.statics.updateSale = (_id, sale_id) => {
   return Sales.find({ product: _id }, "_id").then((sales) =>
-    Medicine.findByIdAndUpdate(_id, { sales: sales.map((sale) => sale._id) })
+    Product.findByIdAndUpdate(_id, { sales: sales.map((sale) => sale._id) })
   );
 };
-medicineModel.statics.addFeedback = ({ _id, rating, feedback, user }) => {
-  return Medicine.findById(_id).then((medicine) => {
+productModel.statics.addFeedback = ({ _id, rating, feedback, user }) => {
+  return Product.findById(_id).then((product) => {
     const newFeedbacks = [
-      ...medicine.rating.reviews,
+      ...product.rating.reviews,
       { rating, user, feedback },
     ];
     const newTotalRating =
       newFeedbacks.reduce((a, c) => {
         return a + c.rating;
       }, 0) / newFeedbacks.length;
-    return Medicine.findByIdAndUpdate(medicine._id, {
+    return Product.findByIdAndUpdate(product._id, {
       rating: {
         totalRating: newTotalRating,
         reviews: newFeedbacks,
@@ -58,7 +59,7 @@ medicineModel.statics.addFeedback = ({ _id, rating, feedback, user }) => {
   });
 };
 
-global.Medicine = mongoose.model("Medicine", medicineModel);
+global.Product = mongoose.model("Product", productModel);
 
 const orderModel = new Schema(
   {
@@ -66,7 +67,7 @@ const orderModel = new Schema(
       {
         product: {
           type: Schema.Types.ObjectId,
-          ref: "Medicines",
+          ref: "Product",
           required: true,
         },
         qty: { type: Number, default: 1 },
@@ -78,7 +79,7 @@ const orderModel = new Schema(
       type: { type: Number, enum: ["flat", "percent"] },
       amount: { type: Number },
       max: { type: Number },
-      dsrc: { type: String },
+      dscr: { type: String },
     },
     approved: { type: Boolean, default: false },
     shipped: { type: Boolean, default: false },
@@ -87,6 +88,17 @@ const orderModel = new Schema(
     cancelled: { type: Boolean, default: false },
     prescriptions: [{ type: String }],
     customer: { type: Schema.Types.ObjectId, ref: "User" },
+    address: {
+      street: { type: String },
+      city: { type: String },
+      state: { type: String },
+      location: {
+        type: { type: String },
+        coordinates: [{ type: Number }, { type: Number }],
+      },
+    },
+    deliveryStaff: { type: Schema.Types.ObjectId, ref: "DeliveryStaff" },
+    commission: { type: Number },
   },
   { timestamps: true }
 );
@@ -99,8 +111,13 @@ const diagnosticModel = new Schema({
     city: { type: String },
     state: { type: String },
     location: {
-      type: { type: String },
-      coordinates: [{ type: Number }, { type: Number }],
+      type: {
+        type: String,
+        enum: ["Point"],
+      },
+      coordinates: {
+        type: [Number],
+      },
     },
   },
   price: { type: Number, required: true },
@@ -127,7 +144,7 @@ const diagnosticModel = new Schema({
       },
     ],
   },
-  vendor: { type: Schema.Types.ObjectId, ref: "Vendor" },
+  vendor: { type: Schema.Types.ObjectId, ref: "Vendor", required: true },
   dscr: { type: String },
 });
 diagnosticModel.statics.updateSale = (_id, sale_id) => {
@@ -154,6 +171,18 @@ diagnosticModel.statics.addFeedback = ({ _id, rating, feedback, user }) => {
   });
 };
 
+const diagnosticPackageModel = new Schema({
+  name: { type: String, required: true },
+  vendor: { type: Schema.Types.ObjectId, ref: "Vendor" },
+  tests: [{ type: Schema.Types.ObjectId, ref: "Diagnostic", required: true }],
+  price: { type: Number, required: true },
+  dscr: { type: String },
+});
+global.DiagnosticPackage = mongoose.model(
+  "DiagnosticPackage",
+  diagnosticPackageModel
+);
+
 global.Diagnostic = mongoose.model("Diagnostic", diagnosticModel);
 
 const diagnosticBookingModel = new Schema(
@@ -170,10 +199,16 @@ const diagnosticBookingModel = new Schema(
     customer: { type: Schema.Types.ObjectId, ref: "User" },
     timeToCollectSample: { type: Date },
     paid: { type: Boolean, default: false },
+    cancelled: { type: Boolean, default: false },
+    sampleCollectionStaff: {
+      type: Schema.Types.ObjectId,
+      ref: "DeliveryStaff",
+    },
     sampleCollected: { type: Boolean, default: false },
     result: { type: String }, // link to pdf file stored some other db
     delivered: { type: Boolean, default: false },
     note: { type: String },
+    commission: { type: Number },
   },
   { timestamps: true }
 );
@@ -193,3 +228,11 @@ const salesModel = new Schema(
   { timestamps: true }
 );
 global.Sale = mongoose.model("Sales", salesModel);
+
+const productCategoryModel = new Schema({
+  category: { type: String },
+});
+global.ProductCategory = mongoose.model(
+  "ProductCategory",
+  productCategoryModel
+);

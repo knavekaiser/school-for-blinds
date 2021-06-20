@@ -1,31 +1,36 @@
 app.post(
-  "/api/addMedicine",
+  "/api/addProduct",
   passport.authenticate("vendorPrivate"),
   (req, res) => {
-    new Medicine({
-      ...req.body,
-      vendor: req.user._id,
-    })
-      .save()
-      .then((dbRes) => {
-        res.json({ message: "medicine added" });
+    const { name, brand, price } = req.body;
+    if (name && brand && price) {
+      new Product({
+        ...req.body,
+        vendor: req.user._id,
       })
-      .catch((err) => {
-        console.log(err);
-        res.status(500).json({ message: "something went wrong" });
-      });
+        .save()
+        .then((dbRes) => {
+          res.json({ message: "product added" });
+        })
+        .catch((err) => {
+          console.log(err);
+          res.status(500).json({ message: "something went wrong" });
+        });
+    } else {
+      res.status(400).json({ message: "incomplete request" });
+    }
   }
 );
-app.post(
-  "/api/editMedicine",
+app.patch(
+  "/api/editProduct",
   passport.authenticate("vendorPrivate"),
   (req, res) => {
-    Medicine.findOneAndUpdate(
+    Product.findOneAndUpdate(
       { _id: req.body._id, vendor: req.user._id },
       { ...req.body }
     )
       .then((dbRes) => {
-        res.json({ message: "medicine updated" });
+        res.json({ message: "product updated" });
       })
       .catch((err) => {
         console.log(err);
@@ -33,8 +38,17 @@ app.post(
       });
   }
 );
-app.get("/api/findMedicine", (req, res) => {
-  const { name, brand, price, sort, order, perPage, page } = req.query;
+app.get("/api/findProducts", (req, res) => {
+  const {
+    name,
+    brand,
+    price,
+    sort,
+    order,
+    perPage,
+    page,
+    category,
+  } = req.query;
   const sortOrder = {
     [sort || "popularity"]: order === "asc" ? 1 : -1,
   };
@@ -44,8 +58,9 @@ app.get("/api/findMedicine", (req, res) => {
     ...(price && {
       price: { $gt: +price.split("-")[0], $lt: +price.split("-")[1] },
     }),
+    ...(category && { category }),
   };
-  Medicine.aggregate([
+  Product.aggregate([
     { $match: query },
     {
       $lookup: {
@@ -56,25 +71,31 @@ app.get("/api/findMedicine", (req, res) => {
       },
     },
     {
-      $project: {
+      $lookup: {
+        from: "vendors",
+        localField: "vendor",
+        foreignField: "_id",
+        as: "vendor",
+      },
+    },
+    {
+      $set: {
+        vendor: {
+          $first: "$vendor",
+        },
         popularity: {
           $reduce: {
             input: "$sales",
-            initialValue: { total: 0 },
+            initialValue: {
+              total: 0,
+            },
             in: {
-              total: { $add: ["$$value.total", "$$this.qty"] },
+              total: {
+                $add: ["$$value.total", "$$this.qty"],
+              },
             },
           },
         },
-        name: 1,
-        available: 1,
-        brand: 1,
-        price: 1,
-        createdAt: 1,
-        updatedAt: 1,
-        prescriptionRequired: 1,
-        dscr: 1,
-        discount: 1,
       },
     },
     {
@@ -82,10 +103,21 @@ app.get("/api/findMedicine", (req, res) => {
         popularity: "$popularity.total",
       },
     },
+    {
+      $project: {
+        "vendor.pass": 0,
+        "vendor.chambers": 0,
+        "vendor.chat": 0,
+        "vendor.teleConsult": 0,
+        "vendor.assistants": 0,
+        "vendor.__v": 0,
+        __v: 0,
+      },
+    },
     { $sort: sortOrder },
     {
       $facet: {
-        medicines: [
+        products: [
           { $skip: +perPage * (+(page || 1) - 1) },
           { $limit: +(perPage || 20) },
         ],
@@ -93,19 +125,19 @@ app.get("/api/findMedicine", (req, res) => {
       },
     },
   ])
-    .then((medicines) => {
-      res.json(medicines);
+    .then((products) => {
+      res.json(products);
     })
     .catch((err) => {
       console.log(err);
       res.status(500).json({ message: "something went wrong" });
     });
 });
-app.get("/api/checkMedicineAvailability", (req, res) => {
-  Medicine.findOne({ _id: req.query._id })
-    .then((medicine) => {
-      if (medicine) {
-        res.json({ available: medicine.available });
+app.get("/api/checkProductAvailability", (req, res) => {
+  Product.findOne({ _id: req.query._id })
+    .then((product) => {
+      if (product) {
+        res.json({ available: product.available });
       } else {
         res.json({ available: 0 });
       }
@@ -123,24 +155,20 @@ app.post(
       vendor,
       total,
       discount,
-      customer,
       prescriptions,
+      address,
     } = req.body;
     new Order({
-      vendor,
-      products,
-      total,
-      discount,
-      customer,
-      prescriptions,
+      ...req.body,
+      customer: req.user._id,
     })
       .save()
       .then((order) => {
         if (order) {
           res.json("order has been placed");
           order.products.forEach(async (item) => {
-            await Medicine.findById(item.product).then((dbProduct) =>
-              Medicine.findByIdAndUpdate(dbProduct._id, {
+            await Product.findById(item.product).then((dbProduct) =>
+              Product.findByIdAndUpdate(dbProduct._id, {
                 available: dbProduct.available - item.qty,
               })
             );
@@ -172,9 +200,9 @@ app.patch(
         if (dbRes) {
           res.json({ message: "order cancelled" });
           dbRes.products.forEach(async ({ product, qty }) => {
-            await Medicine.findById(product).then((medicine) =>
-              Medicine.findByIdAndUpdate(medicine._id, {
-                available: medicine.available + qty,
+            await Product.findById(product).then((product) =>
+              Product.findByIdAndUpdate(product._id, {
+                available: product.available + qty,
               })
             );
           });
@@ -204,9 +232,9 @@ app.patch(
         if (dbRes) {
           res.json({ message: "order cancelled" });
           dbRes.products.forEach(async ({ product, qty }) => {
-            await Medicine.findById(product).then((medicine) =>
-              Medicine.findByIdAndUpdate(medicine._id, {
-                available: medicine.available + qty,
+            await Product.findById(product).then((product) =>
+              Product.findByIdAndUpdate(product._id, {
+                available: product.available + qty,
               })
             );
           });
@@ -260,7 +288,7 @@ app.get(
       { $match: query },
       {
         $lookup: {
-          from: "medicines",
+          from: "products",
           localField: "products.product",
           foreignField: "_id",
           as: "string",
@@ -326,7 +354,7 @@ app.get(
       { $match: query },
       {
         $lookup: {
-          from: "medicines",
+          from: "products",
           localField: "products.product",
           foreignField: "_id",
           as: "string",
@@ -350,6 +378,59 @@ app.get(
         console.log(err);
         res.status(500).json({ message: "something went wrong" });
       });
+  }
+);
+
+app.post(
+  "/api/payForOrder",
+  passport.authenticate("userPrivate"),
+  (req, res) => {
+    const { amount, paymentMethod, order } = req.body;
+    // users give all their payment info in the request body.
+    // payment api gets called with those detail.
+    // return status code 200 and a transaction id in case
+    // of a successful transaction
+    if (200) {
+      new PaymentLedger({
+        type: "collection",
+        user: req.user._id,
+        amount,
+        paymentMethod,
+        note: "store payment", // specific for this route
+        transactionId: "4154205121054105120", // from payment gateway
+        product: order,
+      })
+        .save()
+        .then((dbRes) => {
+          if (dbRes) {
+            return Order.findOneAndUpdate({ _id: order }, { paid: true });
+          } else {
+            return null;
+          }
+        })
+        .then((update) => {
+          if (update) {
+            res.json({ message: "payment successful" });
+          } else {
+            res.status(400).json({ message: "something went wrong" });
+          }
+        })
+        .catch((err) => {
+          if (err.code === 11000) {
+            res.status(400).json({
+              message: "transaction id found in the database",
+              code: err.code,
+              field: Object.keys(err.keyValue)[0],
+            });
+          } else {
+            console.log(err);
+            res.status(500).json({ message: "something went wrong" });
+          }
+        });
+    } else {
+      // send different error based on the payment gateway error
+      res.status(500).json({ message: "something went wrong" });
+    }
   }
 );
 

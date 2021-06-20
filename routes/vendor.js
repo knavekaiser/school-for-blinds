@@ -1,9 +1,16 @@
-const { handleSignIn, signingIn, signToken } = require("../config/passport.js");
+const {
+  handleSignIn,
+  signingIn,
+  signToken,
+  genCode,
+} = require("../config/passport.js");
 
 app.post("/api/registerVendor", (req, res) => {
   const { vendorType, name, phone, email, password, age, gender } = req.body;
   if (
-    (vendorType === "Doctor" || vendorType === "Clinic") &&
+    (vendorType === "Doctor" ||
+      vendorType === "Clinic" ||
+      vendorType === "Pharmacy") &&
     name &&
     email &&
     password &&
@@ -58,7 +65,7 @@ app.get(
 );
 
 app.get(
-  "/api/viewVendorPrfile",
+  "/api/viewVendorProfile",
   passport.authenticate("vendorPrivate"),
   (req, res) => {
     Vendor.aggregate([
@@ -120,7 +127,6 @@ app.get(
       },
     ])
       .then((dbRes) => {
-        console.log(dbRes);
         if (dbRes.length) {
           res.json(dbRes[0]);
         } else {
@@ -137,7 +143,15 @@ app.patch(
   "/api/editVendorProfile",
   passport.authenticate("vendorPrivate"),
   (req, res) => {
-    Vendor.findOneAndUpdate({ _id: req.user._id }, { ...req.body })
+    Vendor.findOneAndUpdate(
+      { _id: req.user._id },
+      {
+        ...req.body,
+        ...(req.body.password && {
+          pass: bcrypt.hashSync(req.body.password, 10),
+        }),
+      }
+    )
       .then((dbRes) => {
         res.json({ message: "profile updated" });
       })
@@ -285,9 +299,19 @@ app.patch("/api/vendorResetPass", async (req, res) => {
       .then((hash) =>
         Vendor.findOneAndUpdate({ $or: [{ phone }, { email }] }, { pass: hash })
       )
-      .then((vendor) => {
-        const user = JSON.parse(JSON.stringify(vendor));
+      .then((dbUser) => {
+        const user = JSON.parse(JSON.stringify(dbUser));
         signingIn(user, res);
+        return dbUser;
+      })
+      .then((dbUser) => {
+        if (dbUser) {
+          OTP.findByIdAndDelete(dbOtp._id).then((value) => {});
+        }
+      })
+      .catch((err) => {
+        console.log(err);
+        res.status(500).json({ message: "something went wrong" });
       });
   } else {
     if (dbOtp.attempt > 2) {

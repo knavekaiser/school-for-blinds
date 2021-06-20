@@ -27,6 +27,7 @@ const userModel = new Schema({
   email: { type: String, unique: true, sparse: true },
   pass: { type: String },
   gender: { type: String },
+  age: { type: Number },
   appointments: [{ type: Schema.Types.ObjectId, ref: "Book", required: true }],
   status: { type: String, default: "basic" },
   medicalRecords: {
@@ -39,6 +40,7 @@ const userModel = new Schema({
     reports: [{ type: String }],
     otherData: [{ type: String }],
   },
+  active: { type: Boolean, default: true },
 });
 userModel.statics.updateAppointments = (_id) => {
   if (!ObjectId.isValid(_id)) return;
