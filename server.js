@@ -16,6 +16,7 @@ const PORT = process.env.PORT || 3003;
 const URI = process.env.MONGO_URI;
 const path = require("path");
 const Razorpay = require("razorpay");
+const cors = require("cors");
 
 global.razorpay = new Razorpay({
   key_id: process.env.RAZOR_PAY_ID,
@@ -52,6 +53,7 @@ mongoose
   .catch((err) => console.log("could not connect to db, here's why: " + err));
 
 app.use(express.json());
+app.use(cors());
 
 const cookieParser = require("cookie-parser");
 app.use(cookieParser());
@@ -59,8 +61,6 @@ require("./config/passport");
 app.use(passport.initialize());
 
 require("./routes/user.js");
-
-require("./routes/assistant.js");
 
 app.post("/api/contactUsRequest", (req, res) => {
   new ContactUs({ ...req.body })
@@ -163,25 +163,3 @@ const io = socketIO(
     console.log("user/vendor backend listening to port:", PORT);
   })
 );
-
-io.on("connection", async (socket) => {
-  const sockets = await io.fetchSockets();
-  const _id = socket.handshake.query.user;
-  const type = socket.handshake.query.type;
-  const target = socket.handshake.query.target;
-  if (type === "vendor") {
-    socket.join(_id);
-  } else {
-    socket.join(target);
-    io.to(target).emit("connected");
-    // io.broadcast.to(target).emit("connected");
-    // clients on "connected" puts the target
-    // into query params of next request
-  }
-  socket.on("newMessage", (payload) => {
-    io.to(socket.handshake.query.room).emit("newData", {
-      user: payload.id,
-      message: payload.message,
-    });
-  });
-});

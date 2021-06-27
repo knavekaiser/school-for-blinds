@@ -346,7 +346,7 @@ app.post(
     Promise.all([
       razorpay.payments.fetch(transactionId),
       Book.findOne({ _id: book }),
-    ]).then(([razorRes, book._id]) => {
+    ]).then(([razorRes, book]) => {
       if (razorRes && book._id) {
         new PaymentLedger({
           type: "collection",
@@ -395,6 +395,39 @@ app.post(
         res.status(400).json({ message: "bad request" });
       }
     });
+  }
+);
+
+app.patch(
+  "/api/updateAppointment",
+  passport.authenticate("userPrivate"),
+  (req, res) => {
+    Book.findOneAndUpdate(
+      { _id: req.body._id, user: req.user._id },
+      { ...req.body }
+    )
+      .then((dbRes) => {
+        if (dbRes) {
+          res.json({ message: "appointment updated" });
+          if (
+            req.body.date &&
+            new Date(dbRes.date).getTime() !== new Date(req.body.date).getTime()
+          ) {
+            notify(
+              dbRes.vendor,
+              `An appointment has been rescheduled for ${new Date(
+                req.body.date
+              )}`
+            );
+          }
+        } else {
+          res.status(400).json({ message: "bad reqeust" });
+        }
+      })
+      .catch((err) => {
+        console.log(err);
+        res.status(500).json({ message: "something went wrong" });
+      });
   }
 );
 
