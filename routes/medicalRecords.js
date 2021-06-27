@@ -1,66 +1,9 @@
-app.post(
-  "/api/addPrescription",
-  passport.authenticate("asstPrivate"),
-  (req, res) => {
-    const { vendor, user, date, img, medicines } = req.body;
-    new Prescription({
-      vendor,
-      user,
-      date,
-      img,
-      medicines,
-    })
-      .save()
-      .then((dbRes) => {
-        res.json({ message: "prescription saved" });
-        User.updatePrescription(dbRes.user);
-      })
-      .catch((err) => {
-        console.log(err);
-        res.json({ message: "something went wrong" });
-      });
-  }
-);
-app.patch(
-  "/api/updatePrescription",
-  passport.authenticate("asstPrivate"),
-  (req, res) => {
-    Prescription.findByIdAndUpdate(req.body._id, { ...req.body })
-      .then((dbRes) => {
-        res.json({ message: "prescription updated" });
-      })
-      .catch((err) => {
-        console.log(err);
-        res.status(500).json({ message: "something went wrong" });
-      });
-  }
-);
-app.delete(
-  "/api/deletePrescription",
-  passport.authenticate("asstPrivate"),
-  (req, res) => {
-    Prescription.findOneAndDelete({ _id: req.body._id })
-      .then((dbRes) => {
-        if (dbRes) {
-          res.json({ message: "prescription deleted" });
-          User.updatePrescription(dbRes.user);
-        } else {
-          res.status(400).json({ message: "bad request" });
-        }
-      })
-      .catch((err) => {
-        console.log(err);
-        res.status(500).json({ message: "something went wrong" });
-      });
-  }
-);
 app.get(
   "/api/getPrescriptions",
-  passport.authenticate("asstPrivate"),
+  passport.authenticate("userPrivate"),
   (req, res) => {
-    const { vendor, user, date, page, perPage } = req.query;
+    const { user, date, page, perPage } = req.query;
     const query = {
-      ...(vendor && { vendor: ObjectId(vendor) }),
       ...(user && { user: ObjectId(user) }),
     };
     Prescription.aggregate([
@@ -76,11 +19,71 @@ app.get(
       },
     ])
       .then((dbRes) => {
-        res.json(dbRes);
+        res.json(dbRes[0]);
       })
       .catch((err) => {
         console.log(err);
         res.json({ message: "something went wrong" });
+      });
+  }
+);
+app.post(
+  "/api/addPrescriptionUser",
+  passport.authenticate("userPrivate"),
+  (req, res) => {
+    const { img } = req.body;
+    if (img) {
+      new Prescription({ ...req.body, user: req.user._id })
+        .save()
+        .then((dbRes) => {
+          if (dbRes) {
+            res.json({ message: "prescription added" });
+          } else {
+            res.status(400).json({ message: "bad request" });
+          }
+        })
+        .catch((err) => {
+          console.log(err);
+          res.status(500).json({ message: "something went wrong" });
+        });
+    } else {
+      res.status(400).json({ message: "incomplete request" });
+    }
+  }
+);
+app.patch(
+  "/api/updatePrescription",
+  passport.authenticate("userPrivate"),
+  (req, res) => {
+    Prescription.findOneAndUpdate(
+      { _id: req.body._id, user: req.user._id },
+      { ...req.body }
+    )
+      .then((dbRes) => {
+        res.json({ message: "prescription updated" });
+      })
+      .catch((err) => {
+        console.log(err);
+        res.status(500).json({ message: "something went wrong" });
+      });
+  }
+);
+app.delete(
+  "/api/deletePrescription",
+  passport.authenticate("userPrivate"),
+  (req, res) => {
+    Prescription.findOneAndDelete({ _id: req.body._id, user: req.user._id })
+      .then((dbRes) => {
+        if (dbRes) {
+          res.json({ message: "prescription deleted" });
+          User.updatePrescription(dbRes.user);
+        } else {
+          res.status(400).json({ message: "bad request" });
+        }
+      })
+      .catch((err) => {
+        console.log(err);
+        res.status(500).json({ message: "something went wrong" });
       });
   }
 );

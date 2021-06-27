@@ -1,43 +1,3 @@
-app.post(
-  "/api/addProduct",
-  passport.authenticate("vendorPrivate"),
-  (req, res) => {
-    const { name, brand, price } = req.body;
-    if (name && brand && price) {
-      new Product({
-        ...req.body,
-        vendor: req.user._id,
-      })
-        .save()
-        .then((dbRes) => {
-          res.json({ message: "product added" });
-        })
-        .catch((err) => {
-          console.log(err);
-          res.status(500).json({ message: "something went wrong" });
-        });
-    } else {
-      res.status(400).json({ message: "incomplete request" });
-    }
-  }
-);
-app.patch(
-  "/api/editProduct",
-  passport.authenticate("vendorPrivate"),
-  (req, res) => {
-    Product.findOneAndUpdate(
-      { _id: req.body._id, vendor: req.user._id },
-      { ...req.body }
-    )
-      .then((dbRes) => {
-        res.json({ message: "product updated" });
-      })
-      .catch((err) => {
-        console.log(err);
-        res.status(500).json({ message: "something went wrong" });
-      });
-  }
-);
 app.get("/api/findProducts", (req, res) => {
   const {
     name,
@@ -126,7 +86,7 @@ app.get("/api/findProducts", (req, res) => {
     },
   ])
     .then((products) => {
-      res.json(products);
+      res.json(products[0]);
     })
     .catch((err) => {
       console.log(err);
@@ -183,368 +143,120 @@ app.post(
       });
   }
 );
-app.patch(
-  "/api/cancelOrderAsVendor",
-  passport.authenticate("vendorPrivate"),
-  (req, res) => {
-    Order.findOneAndUpdate(
-      {
-        _id: req.body._id,
-        delivered: false,
-        vendor: req.user._id,
-        cancelled: false,
-      },
-      { cancelled: true }
-    )
-      .then((dbRes) => {
-        if (dbRes) {
-          res.json({ message: "order cancelled" });
-          dbRes.products.forEach(async ({ product, qty }) => {
-            await Product.findById(product).then((product) =>
-              Product.findByIdAndUpdate(product._id, {
-                available: product.available + qty,
-              })
-            );
-          });
-        } else {
-          res.status(400).json({ message: "bad request" });
-        }
-      })
-      .catch((err) => {
-        console.log(err);
-      });
-  }
-);
-app.patch(
-  "/api/cancelOrderAsAsst",
-  passport.authenticate("asstPrivate"),
-  (req, res) => {
-    Order.findOneAndUpdate(
-      {
-        _id: req.body._id,
-        delivered: false,
-        vendor: req.user.vendor,
-        cancelled: false,
-      },
-      { cancelled: true }
-    )
-      .then((dbRes) => {
-        if (dbRes) {
-          res.json({ message: "order cancelled" });
-          dbRes.products.forEach(async ({ product, qty }) => {
-            await Product.findById(product).then((product) =>
-              Product.findByIdAndUpdate(product._id, {
-                available: product.available + qty,
-              })
-            );
-          });
-        } else {
-          res.status(400).json({ message: "bad request" });
-        }
-      })
-      .catch((err) => {
-        console.log(err);
-      });
-  }
-);
-
-app.get(
-  "/api/getOrdersVendor",
-  passport.authenticate("vendorPrivate"),
-  (req, res) => {
-    const {
-      sort,
-      order,
-      page,
-      perPage,
-      paid,
-      approved,
-      shipped,
-      delivered,
-      within,
-    } = req.query;
-    const query = {
-      vendor: req.user._id,
-      ...(within && {
-        "customer.address.shipping.location": {
-          $geoWithin: {
-            $geometry: {
-              type: "Polygon",
-              coordinates: within,
-            },
-          },
-        },
-      }),
-      ...(paid && { paid: paid === "true" }),
-      ...(approved && { paid: approved === "true" }),
-      ...(shipped && { paid: shipped === "true" }),
-      ...(delivered && { paid: delivered === "true" }),
-      ...(cancelled && { cancelled: cancelled === "true" }),
-    };
-    const sortOrder = {
-      [sort || "age"]: order === "asc" ? 1 : -1,
-    };
-    Order.aggregate([
-      { $match: query },
-      {
-        $lookup: {
-          from: "products",
-          localField: "products.product",
-          foreignField: "_id",
-          as: "string",
-        },
-      },
-      { $sort: sortOrder },
-      {
-        $facet: {
-          orders: [
-            { $skip: +perPage * (+(page || 1) - 1) },
-            { $limit: +(perPage || 20) },
-          ],
-          pageInfo: [{ $group: { _id: null, count: { $sum: 1 } } }],
-        },
-      },
-    ])
-      .then((orders) => {
-        res.json({ orders });
-      })
-      .catch((err) => {
-        console.log(err);
-        res.status(500).json({ message: "something went wrong" });
-      });
-  }
-);
-app.get(
-  "/api/getOrdersAsst",
-  passport.authenticate("asstPrivate"),
-  (req, res) => {
-    const {
-      sort,
-      order,
-      page,
-      perPage,
-      paid,
-      approved,
-      shipped,
-      delivered,
-      within,
-    } = req.query;
-    const query = {
-      vendor: req.user.vendor,
-      ...(within && {
-        "customer.address.shipping.location": {
-          $geoWithin: {
-            $geometry: {
-              type: "Polygon",
-              coordinates: within,
-            },
-          },
-        },
-      }),
-      ...(paid && { paid: paid === "true" }),
-      ...(approved && { paid: approved === "true" }),
-      ...(shipped && { paid: shipped === "true" }),
-      ...(delivered && { paid: delivered === "true" }),
-      ...(cancelled && { cancelled: cancelled === "true" }),
-    };
-    const sortOrder = {
-      [sort || "age"]: order === "asc" ? 1 : -1,
-    };
-    Order.aggregate([
-      { $match: query },
-      {
-        $lookup: {
-          from: "products",
-          localField: "products.product",
-          foreignField: "_id",
-          as: "string",
-        },
-      },
-      { $sort: sortOrder },
-      {
-        $facet: {
-          orders: [
-            { $skip: +perPage * (+(page || 1) - 1) },
-            { $limit: +(perPage || 20) },
-          ],
-          pageInfo: [{ $group: { _id: null, count: { $sum: 1 } } }],
-        },
-      },
-    ])
-      .then((orders) => {
-        res.json({ orders });
-      })
-      .catch((err) => {
-        console.log(err);
-        res.status(500).json({ message: "something went wrong" });
-      });
-  }
-);
 
 app.post(
-  "/api/payForOrder",
+  "/api/createLedgerForStoreUser",
   passport.authenticate("userPrivate"),
   (req, res) => {
-    const { amount, paymentMethod, order } = req.body;
-    // users give all their payment info in the request body.
-    // payment api gets called with those detail.
-    // return status code 200 and a transaction id in case
-    // of a successful transaction
-    if (200) {
-      new PaymentLedger({
-        type: "collection",
-        user: req.user._id,
-        amount,
-        paymentMethod,
-        note: "store payment", // specific for this route
-        transactionId: "4154205121054105120", // from payment gateway
-        product: order,
-      })
-        .save()
+    const { amount, paymentMethod, order, transactionId } = req.body;
+    Promise.all([
+      razorpay.payments.fetch(transactionId),
+      Order.findOne({ _id: order }),
+    ]).then(([razorRes, order]) => {
+      if (razorRes && order) {
+        new PaymentLedger({
+          type: "collection",
+          user: req.user._id,
+          amount,
+          paymentMethod,
+          note: "store payment", // specific for this route
+          transactionId,
+          product: order,
+        })
+          .save()
+          .then((dbRes) => {
+            if (dbRes) {
+              return Order.findOneAndUpdate({ _id: order }, { paid: true });
+            } else {
+              return null;
+            }
+          })
+          .then((update) => {
+            if (update) {
+              res.json({ message: "payment successful" });
+              notify(
+                update.vendor,
+                JSON.stringify({
+                  title: "Payment recieved!",
+                  body: "Payment recieved for an order.",
+                })
+              );
+            } else {
+              res.status(400).json({ message: "something went wrong" });
+            }
+          })
+          .catch((err) => {
+            if (err.code === 11000) {
+              res.status(400).json({
+                message: "transaction id found in the database",
+                code: err.code,
+                field: Object.keys(err.keyValue)[0],
+              });
+            } else {
+              console.log(err);
+              res.status(500).json({ message: "something went wrong" });
+            }
+          });
+      } else {
+        res.status(400).json({ message: "bad request" });
+      }
+    });
+  }
+);
+app.get(
+  "/api/verifyUser/:user/:order",
+  passport.authenticate("userPrivate", { failureRedirect: "/login" }),
+  (req, res) => {
+    if (req.user._id.toString() === req.params.user) {
+      Order.findOne({ customer: req.params.user, _id: req.params.order })
         .then((dbRes) => {
           if (dbRes) {
-            return Order.findOneAndUpdate({ _id: order }, { paid: true });
+            res.json({ message: "contratulation, this order is yours" });
           } else {
-            return null;
-          }
-        })
-        .then((update) => {
-          if (update) {
-            res.json({ message: "payment successful" });
-          } else {
-            res.status(400).json({ message: "something went wrong" });
+            res.json({ message: "bad request" });
           }
         })
         .catch((err) => {
-          if (err.code === 11000) {
-            res.status(400).json({
-              message: "transaction id found in the database",
-              code: err.code,
-              field: Object.keys(err.keyValue)[0],
-            });
-          } else {
-            console.log(err);
-            res.status(500).json({ message: "something went wrong" });
-          }
+          console.log(err);
+          res.status(500).json({ message: "something went wrong" });
         });
     } else {
-      // send different error based on the payment gateway error
-      res.status(500).json({ message: "something went wrong" });
+      res.status(403).json({ message: "forbidden" });
     }
   }
 );
 
-app.patch(
-  "/api/approveOrderVendor",
-  passport.authenticate("vendorPrivate"),
+app.post(
+  "/api/giveFeedbackToDeliveryStaff",
+  passport.authenticate("userPrivate"),
   (req, res) => {
-    Order.findOneAndUpdate(
-      { _id: req.body._id, vendor: req.user._id, paid: true },
-      { approved: true }
-    )
+    const { staff, rating, feedback } = req.body;
+    const user = req.user._id;
+    DeliveryStaff.addFeedback({ staff, rating, user, feedback })
       .then((dbRes) => {
-        res.json({ message: "order approved" });
-        // send mail or sms to dbRes.customer.email/phone
+        res.json({ message: "feedback posted" });
       })
       .catch((err) => {
-        console.log(err);
-        res.status(500).json({ message: "something went wrong" });
-      });
-  }
-);
-app.patch(
-  "/api/approveOrderAsst",
-  passport.authenticate("asstPrivate"),
-  (req, res) => {
-    Order.findOneAndUpdate(
-      { _id: req.body._id, vendor: req.user.vendor, paid: true },
-      { approved: true }
-    )
-      .then((dbRes) => {
-        res.json({ message: "order approved" });
-        // send mail or sms to dbRes.customer.email/phone
-      })
-      .catch((err) => {
-        console.log(err);
-        res.status(500).json({ message: "something went wrong" });
-      });
-  }
-);
-
-app.patch(
-  "/api/updateOrderVendor",
-  passport.authenticate("vendorPrivate"),
-  (req, res) => {
-    Order.findOneAndUpdate(
-      { _id: req.body._id, vendor: req.user._id },
-      { ...req.body }
-    )
-      .then((dbRes) => {
-        if (dbRes) {
-          res.json({ message: "order updated" });
-        } else {
-          res.status(400).json({ message: "bad request" });
-        }
-      })
-      .catch((err) => {
-        console.log(err);
-        res.status(500).json({ message: "something went wrong" });
-      });
-  }
-);
-app.patch(
-  "/api/updateOrderAsst",
-  passport.authenticate("asstPrivate"),
-  (req, res) => {
-    Order.findOneAndUpdate(
-      { _id: req.body._id, vendor: req.user.vendor },
-      { ...req.body }
-    )
-      .then((dbRes) => {
-        if (dbRes) {
-          res.json({ message: "order updated" });
-        } else {
-          res.status(400).json({ message: "bad request" });
-        }
-      })
-      .catch((err) => {
-        console.log(err);
-        res.status(500).json({ message: "something went wrong" });
-      });
-  }
-);
-
-app.patch(
-  "/api/orderDeliveredVendor",
-  passport.authenticate("vendorPrivate"),
-  (req, res) => {
-    Order.findOneAndUpdate(
-      {
-        _id: req.body._id,
-        vendor: req.user._id,
-        approved: true,
-        cancelled: false,
-        delivered: false,
-        shipped: true,
-      },
-      { delivered: true }
-    )
-      .then((dbRes) => {
-        if (dbRes) {
-          res.json({ message: "successfully updated" });
-          notify(
-            dbRes.customer,
-            JSON.stringify({
-              title: "Your product has been delivered",
-              body: "Click here to review your experience.",
-            })
-          );
-          dbRes.products.forEach(async ({ product, qty }) => {
-            await new Sale({ product, qty }).save();
+        if (err === "forbidden") {
+          res.status(400).json({
+            message: "you didn't complete any session with this doctor",
           });
         } else {
-          res.status(400).json({ message: "bad request" });
+          console.log(err);
+          res.status(500).json({ message: "something went wrong" });
         }
+      });
+  }
+);
+app.patch(
+  "/api/editFeedbackToDeliveryStaff",
+  passport.authenticate("userPrivate"),
+  (req, res) => {
+    const { staff, rating, feedback } = req.body;
+    const user = req.user._id;
+    DeliveryStaff.addFeedback({ staff, rating, user, feedback })
+      .then((dbRes) => {
+        res.json({ message: "feedback posted" });
       })
       .catch((err) => {
         console.log(err);
@@ -552,37 +264,15 @@ app.patch(
       });
   }
 );
-app.patch(
-  "/api/orderDeliveredAsst",
-  passport.authenticate("asstPrivate"),
+app.delete(
+  "/api/deleteFeedbackToDeliveryStaff",
+  passport.authenticate("userPrivate"),
   (req, res) => {
-    Order.findOneAndUpdate(
-      {
-        _id: req.body._id,
-        vendor: req.user.vendor,
-        approved: true,
-        cancelled: false,
-        delivered: false,
-        shipped: true,
-      },
-      { delivered: true }
-    )
+    const { staff } = req.body;
+    const user = req.user._id;
+    DeliveryStaff.deleteFeedback({ staff, user })
       .then((dbRes) => {
-        if (dbRes) {
-          res.json({ message: "successfully updated" });
-          notify(
-            dbRes.customer,
-            JSON.stringify({
-              title: "Your product has been delivered",
-              body: "Click here to review your experience.",
-            })
-          );
-          dbRes.products.forEach(async ({ product, qty }) => {
-            await new Sale({ product, qty }).save();
-          });
-        } else {
-          res.status(400).json({ message: "bad request" });
-        }
+        res.json({ message: "feedback deleted" });
       })
       .catch((err) => {
         console.log(err);

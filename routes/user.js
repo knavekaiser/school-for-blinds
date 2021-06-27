@@ -309,3 +309,18 @@ app.patch("/api/userResetPass", async (req, res) => {
     }
   }
 });
+
+app.get(
+  "/api/getAllPayments",
+  passport.authenticate("userPrivate"),
+  (req, res) => {
+    PaymentLedger.find({ user: req.user._id })
+      .then((dbRes) => {
+        res.json(dbRes);
+      })
+      .catch((err) => {
+        console.log(err);
+        res.status(500).json({ message: "something went wrong" });
+      });
+  }
+);

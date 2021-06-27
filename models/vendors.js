@@ -32,6 +32,8 @@ const vendorModel = new Schema(
     },
     commission: { type: Number },
     active: { type: Boolean, default: true },
+    verified: { type: Boolean, default: false },
+    gallery: [{ type: String }],
   },
   { timestamps: true, discriminatorKey: "type" }
 );
@@ -178,7 +180,6 @@ global.Doctor = Vendor.discriminator(
     gender: { type: String },
     education: { type: String },
     yearsOfExp: { type: Number },
-    verified: { type: Boolean, default: false },
   })
 );
 global.Clinic = Vendor.discriminator(
@@ -229,38 +230,6 @@ global.Clinic = Vendor.discriminator(
         },
       },
     ],
-    chat: {
-      available: { type: Boolean, default: false },
-      charge: { type: Number },
-      sessionLength: { type: Number },
-      days: [
-        {
-          day: { type: Number, required: true },
-          hours: [
-            {
-              from: { type: String, required: true },
-              to: { type: String, required: true },
-            },
-          ],
-        },
-      ],
-    },
-    teleConsult: {
-      available: { type: Boolean, default: false },
-      charge: { type: Number },
-      sessionLength: { type: Number },
-      days: [
-        {
-          day: { type: Number, required: true },
-          hours: [
-            {
-              from: { type: String, required: true },
-              to: { type: String, required: true },
-            },
-          ],
-        },
-      ],
-    },
     doctors: [
       {
         type: Schema.Types.ObjectId,
@@ -274,8 +243,38 @@ global.Pharmacy = Vendor.discriminator(
   "Pharmacy",
   new Schema({
     deliveryStaffs: [{ type: Schema.Types.ObjectId, ref: "DeliveryStaff" }],
-    shopRegistrationNumber: { type: String },
-    categoryOfShop: { type: String },
+    shops: [
+      {
+        _id: {
+          type: Schema.Types.ObjectId,
+          default: new ObjectId(),
+        },
+        name: { type: String, required: true },
+        categoryOfShop: { type: String, required: true },
+        registrationNumber: { type: String, required: true, unique: true },
+        legalDocuments: [{ type: String }],
+        paymentOptions: [{ type: String }],
+        gallery: [{ type: String }],
+        address: {
+          street: { type: String },
+          city: { type: String },
+          state: { type: String },
+          zip: { type: Number },
+          location: {
+            type: {
+              type: String,
+              enum: ["Point"],
+            },
+            coordinates: {
+              type: [Number],
+            },
+          },
+        },
+        delivery: { type: Boolean, default: true },
+        pickup: { type: Boolean, default: true },
+        active: { type: Boolean, deafault: true },
+      },
+    ],
   })
 );
 global.DiagnosticCentre = Vendor.discriminator(
@@ -307,7 +306,7 @@ global.Book = mongoose.model("Book", bookModel);
 const prescirptionModel = new Schema(
   {
     user: { type: Schema.Types.ObjectId, ref: "User", required: true },
-    vendor: { type: Schema.Types.ObjectId, ref: "Vendor", required: true },
+    vendor: { type: Schema.Types.ObjectId, ref: "Vendor" },
     img: { type: String },
     date: { type: Date, default: Date.now },
     medicines: [
@@ -321,6 +320,12 @@ const prescirptionModel = new Schema(
         instruction: { type: String },
       },
     ],
+    advice: { type: String },
+    medicineOrdered: { type: Boolean, default: false },
+    location: {
+      type: { type: String, enum: ["Point"] },
+      coordinates: { type: [Number] },
+    },
   },
   { timestamps: true }
 );
@@ -416,24 +421,74 @@ global.OTP = mongoose.model("OTP", OTPModel);
 
 const deliveryStaffModel = new Schema({
   name: { type: String, required: true },
-  age: { type: String },
-  available: { type: String, default: false },
   phone: { type: String, required: true, unique: true },
   email: { type: String, unique: true, sparse: true },
-  address: {
-    street: { type: String },
-    city: { type: String },
-    state: { type: String },
-    zip: { type: Number },
-    location: {
-      type: {
-        type: String,
-        enum: ["Point"],
+  pass: { type: String, required: true },
+  legalDocuments: [{ type: String }],
+  age: { type: String },
+  gender: { type: Number },
+  location: {
+    type: { type: String, enum: ["Point"] },
+    coordinates: { type: [Number] },
+  },
+  healthStatus: { type: String },
+  profileImg: { type: String },
+  available: { type: Boolean, default: false },
+  active: { type: Boolean, default: true },
+  onDelivery: { type: Boolean, default: false },
+  rating: {
+    totalRating: { type: Number, default: 0 },
+    reviews: [
+      {
+        rating: { type: Number, required: true },
+        user: { type: Schema.Types.ObjectId, ref: "User", required: true },
+        feedback: { type: String },
       },
-      coordinates: {
-        type: [Number],
-      },
-    },
+    ],
   },
 });
+deliveryStaffModel.statics.addFeedback = ({
+  staff,
+  rating,
+  feedback,
+  user,
+}) => {
+  return DeliveryStaff.findById(staff).then((staff) => {
+    const newFeedbacks = [
+      ...staff.rating.reviews.filter(
+        (review) => review.user.toString() !== user.toString()
+      ),
+      { rating, user, feedback },
+    ];
+    const newTotalRating =
+      newFeedbacks.reduce((a, c) => {
+        return a + c.rating;
+      }, 0) / newFeedbacks.length;
+    return DeliveryStaff.findByIdAndUpdate(staff._id, {
+      rating: {
+        totalRating: newTotalRating,
+        reviews: newFeedbacks,
+      },
+    });
+  });
+};
+deliveryStaffModel.statics.deleteFeedback = ({ staff, user }) => {
+  return DeliveryStaff.findById(staff).then((dbStaff) => {
+    const newFeedbacks = [
+      ...dbStaff.rating.reviews.filter(
+        (review) => review.user.toString() !== user.toString()
+      ),
+    ];
+    const newTotalRating =
+      newFeedbacks.reduce((a, c) => {
+        return a + c.rating;
+      }, 0) / newFeedbacks.length || 0;
+    return DeliveryStaff.findByIdAndUpdate(staff, {
+      rating: {
+        totalRating: newTotalRating,
+        reviews: newFeedbacks,
+      },
+    });
+  });
+};
 global.DeliveryStaff = mongoose.model("DeliveryStaff", deliveryStaffModel);

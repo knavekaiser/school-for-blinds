@@ -12,9 +12,15 @@ require("./models/vendors");
 require("./models/products");
 require("./models/ledger");
 require("dotenv").config();
-const PORT = process.env.PORT || 3002;
+const PORT = process.env.PORT || 3003;
 const URI = process.env.MONGO_URI;
 const path = require("path");
+const Razorpay = require("razorpay");
+
+global.razorpay = new Razorpay({
+  key_id: process.env.RAZOR_PAY_ID,
+  key_secret: process.env.RAZOR_PAY_SECRET,
+});
 
 const { handleSignIn } = require("./config/passport.js");
 global.notify = (client, body) => {
@@ -56,94 +62,6 @@ require("./routes/user.js");
 
 require("./routes/assistant.js");
 
-app.put(
-  "/api/assignAsstToVendor",
-  passport.authenticate("vendorPrivate"),
-  (req, res) => {
-    const { asst } = req.body;
-    const vendor = req.user;
-    Assistant.findOne({
-      $or: [{ email: asst }, { phone: asst }],
-    })
-      .then((dbAsst) => {
-        if (dbAsst) {
-          const newAssts = [
-            ...vendor.assistants.filter(
-              (asst) => asst.profile.toString() === asst.toString()
-            ),
-            { profile: dbAsst._id, canApproveAppointments: false },
-          ];
-          return Promise.all([
-            Vendor.findOneAndUpdate(
-              { _id: vendor._id },
-              { assistants: newAssts }
-            ),
-            Assistant.findOneAndUpdate(
-              { _id: dbAsst._id },
-              { vendor: vendor._id }
-            ),
-          ]);
-        } else {
-          res.status(400).json({ message: "bad request" });
-        }
-      })
-      .then(([vendor, asst]) => {
-        if (vendor && asst) {
-          res.json({ message: "assistants assigned" });
-        } else {
-          res.status(500).json({ message: "something went wrong" });
-        }
-      })
-      .catch((err) => {
-        if (err.code === 11000) {
-          res
-            .status(400)
-            .json({ message: "assistant is already assigned to someone else" });
-        } else {
-          console.log(err);
-          res.status(500).json({ message: "something went wrong" });
-        }
-      });
-  }
-);
-app.put(
-  "/api/removeAsstFromVendor",
-  passport.authenticate("vendorPrivate"),
-  (req, res) => {
-    const { asst } = req.body;
-    const vendor = req.user;
-    Assistant.findOne({ _id: asst })
-      .then((asst) => {
-        if (vendor && asst) {
-          const newAssts = [
-            ...vendor.assistants.filter(
-              (asst) => asst.profile.toString() === asst.toString()
-            ),
-          ];
-          return Promise.all([
-            Vendor.findOneAndUpdate(
-              { _id: vendor._id },
-              { assistants: newAssts }
-            ),
-            Assistant.findOneAndUpdate({ _id: asst._id }, { vendor: null }),
-          ]);
-        } else {
-          res.status(400).json({ message: "bad request" });
-        }
-      })
-      .then(([vendor, asst]) => {
-        if (vendor && asst) {
-          res.json({ message: "assistant removed" });
-        } else {
-          res.status(500).json({ message: "something went wrong" });
-        }
-      })
-      .catch((err) => {
-        console.log(err);
-        res.status(500).json({ message: "something went wrong" });
-      });
-  }
-);
 app.post("/api/contactUsRequest", (req, res) => {
   new ContactUs({ ...req.body })
     .save()
@@ -156,38 +74,36 @@ app.post("/api/contactUsRequest", (req, res) => {
     });
 });
 
-require("./routes/vendor.js");
-
 app.get("/api/logout", (req, res) => {
   res.clearCookie("access_token");
   res.json({ user: null, success: true });
 });
 
 // ------------------------------------------------------- OAuth
-// app.get(
-//   "/api/auth/google",
-//   passport.authenticate("vendorGoogle", { scope: ["profile", "email"] })
-// );
-// app.get(
-//   "/googleAuthcalllback",
-//   passport.authenticate("vendorGoogle", {
-//     successRedirect: "/",
-//     failureRedirect: "/login",
-//   }),
-//   handleSignIn
-// );
-// app.get("/api/auth/facebook", passport.authenticate("vendorFacebook"));
-// app.get(
-//   "/facebookAuthCallback",
-//   passport.authenticate("vendorFacebook", {
-//     successRedirect: "/",
-//     failureRedirect: "/login",
-//   }),
-//   handleSignIn,
-//   (err, req, res, next) => {
-//     res.status(401).json({ code: 401, message: "invalid credentials" });
-//   }
-// );
+app.get(
+  "/api/auth/google",
+  passport.authenticate("google", { scope: ["profile", "email"] })
+);
+app.get(
+  "/googleAuthcalllback",
+  passport.authenticate("google", {
+    successRedirect: "/",
+    failureRedirect: "/login",
+  }),
+  handleSignIn
+);
+app.get("/api/auth/facebook", passport.authenticate("facebook"));
+app.get(
+  "/facebookAuthCallback",
+  passport.authenticate("facebook", {
+    successRedirect: "/",
+    failureRedirect: "/login",
+  }),
+  handleSignIn,
+  (err, req, res, next) => {
+    res.status(401).json({ code: 401, message: "invalid credentials" });
+  }
+);
 
 require("./routes/appointments.js");
 
@@ -202,36 +118,6 @@ require("./routes/pharmacy.js");
 require("./routes/diagnostic.js");
 
 app.get("/api/getSpeciality", (req, res) => {
-  // WARNING: this aggregate pipeline only works in mogodb Atlas
-  // Speciality.aggregate([
-  //   {
-  //     $search: {
-  //       index: `symptoms`,
-  //       compound: {
-  //         should: [
-  //           {
-  //             autocomplete: {
-  //               query: req.query.q,
-  //               path: `name`,
-  //               tokenOrder: "any",
-  //               fuzzy: { maxEdits: 1, prefixLength: 3 },
-  //             },
-  //           },
-  //           {
-  //             autocomplete: {
-  //               query: req.query.q,
-  //               path: `symptoms`,
-  //               tokenOrder: "any",
-  //               fuzzy: { maxEdits: 1, prefixLength: 3 },
-  //             },
-  //           },
-  //         ],
-  //       },
-  //     },
-  //   },
-  //   { $limit: 8 },
-  // ])
-
   Speciality.find({
     $or: [
       { name: new RegExp(req.query.q, "gi") },
@@ -247,73 +133,6 @@ app.get("/api/getSpeciality", (req, res) => {
       res.status(500).json({ message: "something went wrong" });
     });
 });
-
-// this funciton stats an interval that runs a function every 1 minutes,
-// which finds any appointment between 9 and 10 minutes
-// sends all the doctors and clients notification saying,
-// 'your next appointment starts in 10 minutes'
-function appointmentReminder() {
-  setInterval(() => {
-    const min = new Date(new Date().getTime() + 540000);
-    const max = new Date(new Date().getTime() + 600000);
-    Book.find({
-      date: { $lte: max, $gte: min },
-      approved: true,
-      completed: false,
-      cancelled: false,
-    }).then((appointments) => {
-      Promise.all(
-        appointments.map(async (app) => {
-          notify(
-            app.vendor,
-            JSON.stringify({
-              title: "upcoming appointment",
-              body: `your next appointment starts in 10 minute`,
-            })
-          );
-          notify(
-            app.user,
-            JSON.stringify({
-              title: "upcoming appointment",
-              body: `your appointment starts in 10 minute`,
-            })
-          );
-        })
-      );
-    });
-  }, 1000);
-}
-
-app.post(
-  "/api/notifyUserVendor",
-  passport.authenticate("vendorPrivate"),
-  (req, res) => {
-    const { _id, title, body } = req.query._id;
-    notifyUser(
-      _id,
-      JSON.stringify({
-        title,
-        body,
-      })
-    );
-    // send email or sms here
-  }
-);
-app.post(
-  "/api/notifyUserAsst",
-  passport.authenticate("asstPrivate"),
-  (req, res) => {
-    const { _id, title, body } = req.query._id;
-    notifyUser(
-      _id,
-      JSON.stringify({
-        title,
-        body,
-      })
-    );
-    // send email or sms here
-  }
-);
 
 // notification
 app.post("/subscribe", (req, res) => {
@@ -341,17 +160,8 @@ app.use(express.static("public"));
 const socketIO = require("socket.io");
 const io = socketIO(
   app.listen(PORT, () => {
-    console.log("listening to port:", PORT);
+    console.log("user/vendor backend listening to port:", PORT);
   })
-);
-
-app.get(
-  "/api/initiateChat",
-  passport.authenticate("userPrivate"),
-  (req, res) => {
-    console.log("users are asking for doctors online");
-    res.json("");
-  }
 );
 
 io.on("connection", async (socket) => {

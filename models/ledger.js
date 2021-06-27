@@ -27,3 +27,18 @@ const paymentLedgerModel = new Schema(
   { timestamps: true }
 );
 global.PaymentLedger = mongoose.model("PaymentLedger", paymentLedgerModel);
+
+const payoutModel = new Schema(
+  {
+    vendor: { type: Schema.Types.ObjectId, ref: "Vendor", required: true },
+    date: {
+      from: { type: Date, required: true },
+      to: { type: Date, required: true },
+    },
+    amount: { type: Number, required: true },
+    status: { type: String, default: "pending" },
+    ledgers: [{ type: Schema.Types.ObjectId, ref: "PaymentLedger" }],
+  },
+  { timestamps: true }
+);
+global.Payout = mongoose.model("Payout", payoutModel);

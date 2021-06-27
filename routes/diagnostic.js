@@ -1,42 +1,3 @@
-app.post(
-  "/api/addDiagnostic",
-  passport.authenticate("vendorPrivate"),
-  (req, res) => {
-    new Diagnostic({
-      ...req.body,
-      vendor: req.user._id,
-    })
-      .save()
-      .then((dbRes) => {
-        res.json({ message: "diagnostic added" });
-      })
-      .catch((err) => {
-        console.log(err);
-        res.status(500).json({ message: "something went wrong" });
-      });
-  }
-);
-app.patch(
-  "/api/editDiagnostic",
-  passport.authenticate("vendorPrivate"),
-  (req, res) => {
-    Diagnostic.findOneAndUpdate(
-      { _id: req.body._id, vendor: req.user._id },
-      { ...req.body }
-    )
-      .then((dbRes) => {
-        if (dbRes) {
-          res.json({ message: "diagnostic updated" });
-        } else {
-          res.status(400).json({ message: "bad request" });
-        }
-      })
-      .catch((err) => {
-        console.log(err);
-        res.status(500).json({ message: "something went wrong" });
-      });
-  }
-);
 app.get("/api/findDiagnostics", (req, res) => {
   const {
     q,
@@ -106,7 +67,7 @@ app.get("/api/findDiagnostics", (req, res) => {
   ];
   Diagnostic.aggregate(pipeline)
     .then((diagnostic) => {
-      res.json(diagnostic);
+      res.json(diagnostic[0]);
     })
     .catch((err) => {
       console.log(err);
@@ -221,166 +182,71 @@ app.patch(
       });
   }
 );
-app.patch(
-  "/api/editDiagnosticBookingAsst",
-  passport.authenticate("asstPrivate"),
-  (req, res) => {
-    DiagnosticBooking.findOneAndUpdate(
-      { _id: req.body._id, vendor: req.user.vendor },
-      { ...req.body }
-    )
-      .then((dbRes) => {
-        if (dbRes) {
-          res.json({ message: "booking updated" });
-        } else {
-          res.status(400).json({ message: "bad request" });
-        }
-      })
-      .catch((err) => {
-        console.log(err);
-        res.status(500).json({ message: "something went wrong" });
-      });
-  }
-);
-app.patch(
-  "/api/editDiagnosticBookingVendor",
-  passport.authenticate("vendorPrivate"),
-  (req, res) => {
-    DiagnosticBooking.findOneAndUpdate(
-      { _id: req.body._id, vendor: req.user.vendor },
-      { ...req.body }
-    )
-      .then((dbRes) => {
-        if (dbRes) {
-          res.json({ message: "booking updated" });
-        } else {
-          res.status(400).json({ message: "bad request" });
-        }
-      })
-      .catch((err) => {
-        console.log(err);
-        res.status(500).json({ message: "something went wrong" });
-      });
-  }
-);
-
-app.patch(
-  "/api/diagnosticCompletedAsst",
-  passport.authenticate("asstPrivate"),
-  (req, res) => {
-    DiagnosticBooking.findOneAndUpdate(
-      { _id: req.body._id, vendor: req.user.vendor, delivered: false },
-      { delivered: true }
-    )
-      .then((dbRes) => {
-        if (dbRes) {
-          res.json({ message: "test result delivered" });
-          notify(
-            dbRes.customer,
-            JSON.stringify({
-              title: "Test result has been delivered",
-              body: "Click here to review your experience.",
-            })
-          );
-          dbRes.tests.forEach(async (diagnostic) => {
-            console.log(diagnostic);
-            await new Sale({ product: diagnostic._id, qty: 1 }).save();
-          });
-        } else {
-          res.status(400).json({ message: "something went wrong" });
-        }
-      })
-      .catch((err) => {
-        console.log(err);
-        res.status(500).json({ message: "something went wrong" });
-      });
-  }
-);
-app.patch(
-  "/api/diagnosticCompletedVendor",
-  passport.authenticate("vendorPrivate"),
-  (req, res) => {
-    DiagnosticBooking.findOneAndUpdate(
-      { _id: req.body._id, vendor: req.user._id, delivered: false },
-      { delivered: true }
-    )
-      .then((dbRes) => {
-        if (dbRes) {
-          res.json({ message: "test result delivered" });
-          notify(
-            dbRes.customer,
-            JSON.stringify({
-              title: "Test result has been delivered",
-              body: "Click here to review your experience.",
-            })
-          );
-          dbRes.tests.forEach(async (diagnostic) => {
-            console.log(diagnostic);
-            await new Sale({ product: diagnostic._id, qty: 1 }).save();
-          });
-        } else {
-          res.status(400).json({ message: "something went wrong" });
-        }
-      })
-      .catch((err) => {
-        console.log(err);
-        res.status(500).json({ message: "something went wrong" });
-      });
-  }
-);
 
 app.post(
-  "/api/payForDiagnostic",
+  "/api/createLedgerForDiagnosticCentreUser",
   passport.authenticate("userPrivate"),
   (req, res) => {
-    const { amount, paymentMethod, diagnostic } = req.body;
-    // users give all their payment info in the request body.
-    // payment api gets called with those detail.
-    // return status code 200 and a transaction id in case
-    // of a successful transaction
-    if (200) {
-      new PaymentLedger({
-        type: "collection",
-        user: req.user._id,
-        amount,
-        paymentMethod,
-        note: "payment for diagnostics", // specific for this route
-        transactionId: "415425125422105120", // from payment gateway
-        product: diagnostic,
-      })
-        .save()
-        .then((dbRes) => {
-          if (dbRes) {
-            return DiagnosticBooking.findOneAndUpdate(
-              { _id: diagnostic },
-              { paid: true }
-            );
-          } else {
-            return null;
-          }
-        })
-        .then((update) => {
-          if (update) {
-            res.json({ message: "payment successful" });
-          } else {
-            res.status(400).json({ message: "something went wrong" });
-          }
-        })
-        .catch((err) => {
-          if (err.code === 11000) {
-            res.status(400).json({
-              message: "transaction id found in the database",
-              code: err.code,
-              field: Object.keys(err.keyValue)[0],
+    const { transactionId, amount, paymentMethod, booking } = req.body;
+    Promise.all([
+      razorpay.payments.fetch(transactionId),
+      DiagnosticBooking.findOne({ _id: booking }),
+    ])
+      .then(([razorRes, booking]) => {
+        if (razorRes && booking) {
+          new PaymentLedger({
+            type: "collection",
+            user: req.user._id,
+            amount,
+            paymentMethod,
+            note: "payment for diagnostics", // specific for this route
+            transactionId,
+            product: booking._id,
+          })
+            .save()
+            .then((dbRes) => {
+              if (dbRes) {
+                return DiagnosticBooking.findOneAndUpdate(
+                  { _id: diagnostic },
+                  { paid: true }
+                );
+              } else {
+                return null;
+              }
+            })
+            .then((update) => {
+              if (update) {
+                res.json({ message: "payment successful" });
+                notify(
+                  update.vendor,
+                  JSON.stringify({
+                    title: "Payment recieved!",
+                    body: "Payment recieved for diagnostic booking.",
+                  })
+                );
+              } else {
+                res.status(400).json({ message: "something went wrong" });
+              }
+            })
+            .catch((err) => {
+              if (err.code === 11000) {
+                res.status(400).json({
+                  message: "transaction id found in the database",
+                  code: err.code,
+                  field: Object.keys(err.keyValue)[0],
+                });
+              } else {
+                console.log(err);
+                res.status(500).json({ message: "something went wrong" });
+              }
             });
-          } else {
-            console.log(err);
-            res.status(500).json({ message: "something went wrong" });
-          }
-        });
-    } else {
-      // send different error based on the payment gateway error
-      res.status(500).json({ message: "something went wrong" });
-    }
+        } else {
+          res.status(400).json({ message: "bad request" });
+        }
+      })
+      .catch((err) => {
+        console.log(err);
+        res.status(500).json({ message: "something went wrong" });
+      });
   }
 );

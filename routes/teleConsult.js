@@ -1,20 +1,3 @@
-app.patch(
-  "/api/updateTeleConsultTimeslots",
-  passport.authenticate("vendorPrivate"),
-  (req, res) => {
-    Vendor.findOneAndUpdate(
-      { _id: req.body._id },
-      { "teleConsult.days": req.body.days }
-    )
-      .then((dbRes) => {
-        res.json({ message: "hours updated" });
-      })
-      .catch((err) => {
-        console.log(err);
-        res.status(500).json({ message: "something went wrong" });
-      });
-  }
-);
 app.get("/api/findVendorsForTeleConsult", (req, res) => {
   const { sort, order, page, perPage } = req.query;
   const sortOrder = {
@@ -91,7 +74,7 @@ app.get("/api/findVendorsForTeleConsult", (req, res) => {
     },
   ])
     .then((dbRes) => {
-      res.json(dbRes);
+      res.json(dbRes[0]);
     })
     .catch((err) => {
       console.log(err);
@@ -133,27 +116,6 @@ app.post(
   }
 );
 app.patch(
-  "/api/updateTeleconsult",
-  passport.authenticate("vendorPrivate"),
-  (req, res) => {
-    TeleConsult.findOneAndUpdate(
-      { _id: req.body._id, vendor: req.user._id },
-      { ...req.body }
-    )
-      .then((dbRes) => {
-        if (dbRes) {
-          res.json({ message: "successfully updated" });
-        } else {
-          res.status(400).json({ message: "bad request" });
-        }
-      })
-      .catch((err) => {
-        console.log(err);
-        res.status(500).json({ message: "something went wrong" });
-      });
-  }
-);
-app.patch(
   "/api/updateTeleConsultUser",
   passport.authenticate("userPrivate"),
   (req, res) => {
@@ -174,91 +136,7 @@ app.patch(
       });
   }
 );
-app.patch(
-  "/api/updateTeleConsultAsst",
-  passport.authenticate("asstPrivate"),
-  (req, res) => {
-    TeleConsult.findOneAndUpdate(
-      { _id: req.body._id, vendor: req.user.vendor },
-      { ...req.body }
-    )
-      .then((dbRes) => {
-        if (dbRes) {
-          res.json({ message: "booking updated" });
-        } else {
-          res.json({ message: "bad request" });
-        }
-      })
-      .catch((err) => {
-        console.log(err);
-        res.status(500).json({ message: "something went wrong" });
-      });
-  }
-);
 
-app.patch(
-  "/api/cancelTeleConsultVendor",
-  passport.authenticate("vendorPrivate"),
-  (req, res) => {
-    TeleConsult.findOneAndUpdate(
-      { _id: req.body._id, vendor: req.user._id, completed: false },
-      { cancelled: true }
-    )
-      .then((dbRes) => {
-        if (dbRes) {
-          res.json({ message: "booking has been cancelled." });
-          notify(
-            dbRes.user,
-            JSON.stringify({
-              title: "Tele Consult Booking!",
-              body: "Your tele consult booking has been cancelled.",
-            })
-          );
-        } else {
-          res.status(400).json({ message: "bad request" });
-        }
-      })
-      .catch((err) => {
-        console.log(err);
-        res.status(500).json({ message: "something went wrong" });
-      });
-  }
-);
-app.patch(
-  "/api/cancelTeleConsultAsst",
-  passport.authenticate("asstPrivate"),
-  (req, res) => {
-    TeleConsult.findOneAndUpdate(
-      { _id: req.body._id, vendor: req.user.vendor, completed: false },
-      { cancelled: true }
-    )
-      .then((dbRes) => {
-        if (dbRes) {
-          res.json({ message: "booking has been cancelled." });
-          notify(
-            dbRes.user,
-            JSON.stringify({
-              title: "Tele Consult Booking!",
-              body: "Your tele consult booking has been cancelled.",
-            })
-          );
-          notify(
-            dbRes.vendor,
-            JSON.stringify({
-              title: "Tele Consult Booking!",
-              body: "A tele consult booking has been cancelled.",
-            })
-          );
-        } else {
-          res.status(400).json({ message: "bad request" });
-        }
-      })
-      .catch((err) => {
-        console.log(err);
-        res.status(500).json({ message: "something went wrong" });
-      });
-  }
-);
 app.patch(
   "/api/cancelTeleConsultUser",
   passport.authenticate("userPrivate"),
@@ -289,205 +167,68 @@ app.patch(
 );
 
 app.post(
-  "/api/payForTeleConsult",
+  "/api/createLedgerForTeleConsultUser",
   passport.authenticate("userPrivate"),
   (req, res) => {
-    const { amount, paymentMethod, teleConsult } = req.body;
-    // users give all their payment info in the request body.
-    // payment api gets called with those detail.
-    // return status code 200 and a transaction id in case
-    // of a successful transaction
-    if (200) {
-      new PaymentLedger({
-        type: "collection",
-        user: req.user._id,
-        amount,
-        paymentMethod,
-        note: "payment for tele consult", // specific for this route
-        transactionId: "415422205125422105120", // from payment gateway
-        product: teleConsult,
-      })
-        .save()
-        .then((dbRes) => {
-          if (dbRes) {
-            return TeleConsult.findOneAndUpdate(
-              { _id: teleConsult },
-              { paid: true }
-            );
-          } else {
-            return null;
-          }
+    const { amount, paymentMethod, teleConsult, transactionId } = req.body;
+    Promise.all([
+      razorpay.payments.fetch(transactionId),
+      TeleConsult.findOne({ _id: teleConsult }),
+    ]).then(([razorRes, teleConsult]) => {
+      if (razorRes && teleConsult) {
+        new PaymentLedger({
+          type: "collection",
+          user: req.user._id,
+          amount,
+          paymentMethod,
+          note: "payment for teleConsult", // specific for this route
+          transactionId,
+          product: teleConsult._id,
         })
-        .then((update) => {
-          if (update) {
-            res.json({ message: "payment successful" });
-          } else {
-            res.status(400).json({ message: "something went wrong" });
-          }
-        })
-        .catch((err) => {
-          if (err.code === 11000) {
-            res.status(400).json({
-              message: "transaction id found in the database",
-              code: err.code,
-              field: Object.keys(err.keyValue)[0],
-            });
-          } else {
-            console.log(err);
-            res.status(500).json({ message: "something went wrong" });
-          }
-        });
-    } else {
-      // send different error based on the payment gateway error
-      res.status(500).json({ message: "something went wrong" });
-    }
+          .save()
+          .then((dbRes) => {
+            if (dbRes) {
+              return TeleConsult.findOneAndUpdate(
+                { _id: teleConsult },
+                { paid: true }
+              );
+            } else {
+              return null;
+            }
+          })
+          .then((update) => {
+            if (update) {
+              res.json({ message: "payment successful" });
+              notify(
+                update.vendor,
+                JSON.stringify({
+                  title: "Payment recieved!",
+                  body: "Payment recieved for tele consult appointment.",
+                })
+              );
+            } else {
+              res.status(400).json({ message: "something went wrong" });
+            }
+          })
+          .catch((err) => {
+            if (err.code === 11000) {
+              res.status(400).json({
+                message: "transaction id found in the database",
+                code: err.code,
+                field: Object.keys(err.keyValue)[0],
+              });
+            } else {
+              console.log(err);
+              res.status(500).json({ message: "something went wrong" });
+            }
+          });
+      } else {
+        res.status(400).json({ message: "bad request" });
+      }
+    });
   }
 );
 
-app.get(
-  "/api/getAllTeleConsultsVendor",
-  passport.authenticate("vendorPrivate"),
-  (req, res) => {
-    const {
-      dateFrom,
-      dateTo,
-      completed,
-      cancelled,
-      paid,
-      page,
-      perPage,
-    } = req.query;
-    const query = {
-      vendor: ObjectId(req.user._id),
-      ...(dateFrom && { date: { $gte: new Date(dateFrom) } }),
-      ...(dateTo && { date: { $lte: new Date(dateTo) } }),
-      ...(dateFrom &&
-        dateTo && {
-          date: {
-            $gte: new Date(dateFrom),
-            $lte: new Date(dateTo),
-          },
-        }),
-      ...(completed && { completed: completed === "true" }),
-      ...(paid && { paid: paid === "true" }),
-      ...(cancelled && { cancelled: cancelled === "true" }),
-    };
-    TeleConsult.aggregate([
-      { $match: query },
-      {
-        $lookup: {
-          from: "users",
-          localField: "user",
-          foreignField: "_id",
-          as: "user",
-        },
-      },
-      {
-        $set: {
-          user: {
-            $first: "$user",
-          },
-        },
-      },
-      {
-        $project: {
-          "user.pass": 0,
-          "user.address": 0,
-          "user.appointments": 0,
-          "user.medicalRecords": 0,
-        },
-      },
-      {
-        $facet: {
-          teleConsults: [
-            { $skip: +perPage * (+(page || 1) - 1) },
-            { $limit: +(perPage || 20) },
-          ],
-          pageInfo: [{ $group: { _id: null, count: { $sum: 1 } } }],
-        },
-      },
-    ])
-      .then((dbRes) => {
-        res.json(dbRes);
-      })
-      .catch((err) => {
-        console.log(err);
-        res.status(500).json({ message: "something went wrong" });
-      });
-  }
-);
-app.get(
-  "/api/getAllTeleConsultsAsst",
-  passport.authenticate("asstPrivate"),
-  (req, res) => {
-    const {
-      dateFrom,
-      dateTo,
-      completed,
-      cancelled,
-      paid,
-      page,
-      perPage,
-    } = req.query;
-    const query = {
-      vendor: ObjectId(req.user.vendor),
-      ...(dateFrom && { date: { $gte: new Date(dateFrom) } }),
-      ...(dateTo && { date: { $lte: new Date(dateTo) } }),
-      ...(dateFrom &&
-        dateTo && {
-          date: {
-            $gte: new Date(dateFrom),
-            $lte: new Date(dateTo),
-          },
-        }),
-      ...(completed && { completed: completed === "true" }),
-      ...(paid && { paid: paid === "true" }),
-      ...(cancelled && { cancelled: cancelled === "true" }),
-    };
-    TeleConsult.aggregate([
-      { $match: query },
-      {
-        $lookup: {
-          from: "users",
-          localField: "user",
-          foreignField: "_id",
-          as: "user",
-        },
-      },
-      {
-        $set: {
-          user: {
-            $first: "$user",
-          },
-        },
-      },
-      {
-        $project: {
-          "user.pass": 0,
-          "user.address": 0,
-          "user.appointments": 0,
-          "user.medicalRecords": 0,
-        },
-      },
-      {
-        $facet: {
-          teleConsults: [
-            { $skip: +perPage * (+(page || 1) - 1) },
-            { $limit: +(perPage || 20) },
-          ],
-          pageInfo: [{ $group: { _id: null, count: { $sum: 1 } } }],
-        },
-      },
-    ])
-      .then((dbRes) => {
-        res.json(dbRes);
-      })
-      .catch((err) => {
-        console.log(err);
-        res.status(500).json({ message: "something went wrong" });
-      });
-  }
-);
 app.get(
   "/api/getAllTeleConsultsUser",
   passport.authenticate("userPrivate"),
@@ -553,7 +294,7 @@ app.get(
       },
     ])
       .then((dbRes) => {
-        res.json(dbRes);
+        res.json(dbRes[0]);
       })
       .catch((err) => {
         console.log(err);
@@ -562,100 +303,6 @@ app.get(
   }
 );
 
-app.get(
-  "/api/getSingleTeleConsultVendor",
-  passport.authenticate("vendorPrivate"),
-  (req, res) => {
-    const query = {
-      vendor: ObjectId(req.user._id),
-      _id: ObjectId(req.query._id),
-    };
-    TeleConsult.aggregate([
-      { $match: query },
-      {
-        $lookup: {
-          from: "users",
-          localField: "user",
-          foreignField: "_id",
-          as: "user",
-        },
-      },
-      {
-        $set: {
-          user: {
-            $first: "$user",
-          },
-        },
-      },
-      {
-        $project: {
-          "user.pass": 0,
-          "user.address": 0,
-          "user.appointments": 0,
-          "user.medicalRecords": 0,
-        },
-      },
-    ])
-      .then((dbRes) => {
-        if (dbRes.length) {
-          res.json(dbRes[0]);
-        } else {
-          res.status(400).json({ message: "bad request" });
-        }
-      })
-      .catch((err) => {
-        console.log(err);
-        res.status(500).json({ message: "something went wrong" });
-      });
-  }
-);
-app.get(
-  "/api/getSingleTeleConsultAsst",
-  passport.authenticate("asstPrivate"),
-  (req, res) => {
-    const query = {
-      vendor: ObjectId(req.user.vendor),
-      _id: ObjectId(req.user._id),
-    };
-    TeleConsult.aggregate([
-      { $match: query },
-      {
-        $lookup: {
-          from: "users",
-          localField: "user",
-          foreignField: "_id",
-          as: "user",
-        },
-      },
-      {
-        $set: {
-          user: {
-            $first: "$user",
-          },
-        },
-      },
-      {
-        $project: {
-          "user.pass": 0,
-          "user.address": 0,
-          "user.appointments": 0,
-          "user.medicalRecords": 0,
-        },
-      },
-    ])
-      .then((dbRes) => {
-        if (dbRes.length) {
-          res.json(dbRes[0]);
-        } else {
-          res.status(400).json({ message: "bad request" });
-        }
-      })
-      .catch((err) => {
-        console.log(err);
-        res.status(500).json({ message: "something went wrong" });
-      });
-  }
-);
 app.get(
   "/api/getSingleTeleConsultUser",
   passport.authenticate("userPrivate"),
