@@ -328,7 +328,8 @@ app.post(
           JSON.stringify({
             title: "appointment booked",
             body: `an appointment has been booked for ${bookingInfo.date}`,
-          })
+          }),
+          "Vendor"
         );
       })
       .catch((err) => {
@@ -373,7 +374,8 @@ app.post(
                 JSON.stringify({
                   title: "Payment recieved!",
                   body: "Payment recieved for appointment.",
-                })
+                }),
+                "Vendor"
               );
             } else {
               res.status(400).json({ message: "something went wrong" });
@@ -415,9 +417,13 @@ app.patch(
           ) {
             notify(
               dbRes.vendor,
-              `An appointment has been rescheduled for ${new Date(
-                req.body.date
-              )}`
+              JSON.stringify({
+                title: "appointment rescheduled!",
+                body: `An appointment has been rescheduled for ${new Date(
+                  req.body.date
+                )}`,
+              }),
+              "Vendor"
             );
           }
         } else {
@@ -447,14 +453,8 @@ app.patch(
             JSON.stringify({
               title: "appointment cancelled",
               body: "an appointment has been cancelled",
-            })
-          );
-          notify(
-            appointment.user,
-            JSON.stringify({
-              title: "appointment cancelled",
-              body: "an appointment has been cancelled",
-            })
+            }),
+            "Vendor"
           );
         } else {
           res.status(400).json({ message: "appointment could not be found" });
@@ -549,6 +549,59 @@ app.delete(
     Vendor.deleteFeedback({ vendor, user })
       .then((dbRes) => {
         res.json({ message: "feedback deleted" });
+      })
+      .catch((err) => {
+        console.log(err);
+        res.status(500).json({ message: "something went wrong" });
+      });
+  }
+);
+
+app.post(
+  "/api/feedbackToAppointment",
+  passport.authenticate("userPrivate"),
+  (req, res) => {
+    const { _id, rating, feedback } = req.body;
+    if ((_id, rating, feedback)) {
+      Book.findOneAndUpdate(
+        { _id: req.body._id, user: req.user._id, completed: true },
+        {
+          userReview: {
+            rating: req.body.rating,
+            feedback: req.body.feedback,
+          },
+        }
+      )
+        .then((dbRes) => {
+          if (dbRes) {
+            res.json({ message: "feedback posted" });
+          } else {
+            res.status(400).json({ message: "bad request" });
+          }
+        })
+        .catch((err) => {
+          console.log(err);
+          res.status(500).json({ message: "something went wrong" });
+        });
+    } else {
+      res.status(400).json({ message: "incomplete request" });
+    }
+  }
+);
+app.delete(
+  "/api/feedbackToAppointment",
+  passport.authenticate("userPrivate"),
+  (req, res) => {
+    Book.findOneAndUpdate(
+      { _id: req.body._id, user: req.user._id, completed: true },
+      { userReview: null }
+    )
+      .then((dbRes) => {
+        if (dbRes) {
+          res.json({ message: "feedback deleted" });
+        } else {
+          res.status(400).json({ message: "bad request" });
+        }
       })
       .catch((err) => {
         console.log(err);

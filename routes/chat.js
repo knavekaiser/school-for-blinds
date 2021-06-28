@@ -100,7 +100,8 @@ app.post("/api/bookChat", passport.authenticate("userPrivate"), (req, res) => {
           JSON.stringify({
             title: "Chat!",
             body: "Someone booked a chat session.",
-          })
+          }),
+          "Vendor"
         );
       } else {
         res.status(400).json({ message: "bad request" });
@@ -150,7 +151,8 @@ app.patch(
             JSON.stringify({
               title: "Chat Booking!",
               body: "A chat booking has been cancelled.",
-            })
+            }),
+            "Vendor"
           );
         } else {
           res.status(400).json({ message: "bad request" });
@@ -198,7 +200,8 @@ app.post(
                 JSON.stringify({
                   title: "Payment recieved!",
                   body: "Payment recieved for chat appointment.",
-                })
+                }),
+                "Vendor"
               );
             } else {
               res.status(400).json({ message: "something went wrong" });

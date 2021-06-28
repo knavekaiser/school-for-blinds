@@ -179,7 +179,8 @@ app.post(
                 JSON.stringify({
                   title: "Payment recieved!",
                   body: "Payment recieved for an order.",
-                })
+                }),
+                "Vendor"
               );
             } else {
               res.status(400).json({ message: "something went wrong" });

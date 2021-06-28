@@ -24,7 +24,16 @@ global.razorpay = new Razorpay({
 });
 
 const { handleSignIn } = require("./config/passport.js");
-global.notify = (client, body) => {
+global.notify = (client, body, clientType) => {
+  if (clientType) {
+    const parsed = JSON.parse(body);
+    mongoose.models[clientType]
+      .findOneAndUpdate(
+        { _id: client },
+        { $push: { notifications: { ...parsed } } }
+      )
+      .then((notificationSaved) => {});
+  }
   return NotificationSubscription.findOne({ client }).then((subscription) => {
     if (subscription) {
       return webPush.sendNotification(subscription, body);

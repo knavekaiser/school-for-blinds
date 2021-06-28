@@ -149,7 +149,8 @@ app.post(
                   body: `someone booked a test, be at the location at ${new Date(
                     dbRes.timeToCollectSample
                   )} to collect sample.`,
-                })
+                }),
+                "Vendor"
               );
             }
           });
@@ -222,7 +223,8 @@ app.post(
                   JSON.stringify({
                     title: "Payment recieved!",
                     body: "Payment recieved for diagnostic booking.",
-                  })
+                  }),
+                  "Vendor"
                 );
               } else {
                 res.status(400).json({ message: "something went wrong" });

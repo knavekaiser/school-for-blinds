@@ -41,6 +41,16 @@ const userModel = new Schema({
     otherData: [{ type: String }],
   },
   active: { type: Boolean, default: true },
+  notifications: [
+    new Schema(
+      {
+        title: { type: String, required: true },
+        body: { type: String, required: true },
+        link: { type: String },
+      },
+      { timestamps: true }
+    ),
+  ],
 });
 userModel.statics.updateAppointments = (_id) => {
   if (!ObjectId.isValid(_id)) return;

@@ -103,7 +103,8 @@ app.post(
             JSON.stringify({
               title: "Tele Consult!",
               body: "Someone booked a tele consult session.",
-            })
+            }),
+            "Vendor"
           );
         } else {
           res.status(400).json({ message: "bad request" });
@@ -153,7 +154,8 @@ app.patch(
             JSON.stringify({
               title: "Tele Consult Booking!",
               body: "A tele consult booking has been cancelled.",
-            })
+            }),
+            "Vendor"
           );
         } else {
           res.status(400).json({ message: "bad request" });
@@ -204,7 +206,8 @@ app.post(
                 JSON.stringify({
                   title: "Payment recieved!",
                   body: "Payment recieved for tele consult appointment.",
-                })
+                }),
+                "Vendor"
               );
             } else {
               res.status(400).json({ message: "something went wrong" });

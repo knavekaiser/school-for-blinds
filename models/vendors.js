@@ -34,6 +34,16 @@ const vendorModel = new Schema(
     active: { type: Boolean, default: true },
     verified: { type: Boolean, default: false },
     gallery: [{ type: String }],
+    notifications: [
+      new Schema(
+        {
+          title: { type: String, required: true },
+          body: { type: String, required: true },
+          link: { type: String },
+        },
+        { timestamps: true }
+      ),
+    ],
   },
   { timestamps: true, discriminatorKey: "type" }
 );
@@ -298,6 +308,12 @@ const bookModel = new Schema(
     cancelled: { type: Boolean, default: false },
     approved: { type: Boolean, default: false },
     paid: { type: Boolean, default: false },
+    reasonForVisit: { type: String },
+    note: { type: String },
+    userReview: {
+      rating: { type: Number },
+      feedback: { type: String },
+    },
   },
   { timestamps: true }
 );
@@ -375,31 +391,44 @@ const chatModel = new Schema(
 );
 global.Chat = mongoose.model("Chat", chatModel);
 
-const assistantModel = new Schema({
-  name: { type: String, required: true },
-  email: { type: String },
-  phone: { type: String },
-  pass: { type: String },
-  vendor: { type: Schema.Types.ObjectId, ref: "Vendor" },
-  gender: { type: String },
-  age: { type: String },
-  address: {
-    street: { type: String },
-    city: { type: String },
-    state: { type: String },
-    location: {
-      type: {
-        type: String,
-        enum: ["Point"],
-      },
-      coordinates: {
-        type: [Number],
+const assistantModel = new Schema(
+  {
+    name: { type: String, required: true },
+    email: { type: String },
+    phone: { type: String },
+    pass: { type: String },
+    vendor: { type: Schema.Types.ObjectId, ref: "Vendor" },
+    gender: { type: String },
+    age: { type: String },
+    address: {
+      street: { type: String },
+      city: { type: String },
+      state: { type: String },
+      location: {
+        type: {
+          type: String,
+          enum: ["Point"],
+        },
+        coordinates: {
+          type: [Number],
+        },
       },
     },
+    approved: { type: Boolean, default: false },
+    employeeId: { type: String, required: true },
+    notifications: [
+      new Schema(
+        {
+          title: { type: String, required: true },
+          body: { type: String, required: true },
+          link: { type: String },
+        },
+        { timestamps: true }
+      ),
+    ],
   },
-  approved: { type: Boolean, default: false },
-  employeeId: { type: String, required: true },
-});
+  { timestamps: true }
+);
 global.Assistant = mongoose.model("Assistant", assistantModel);
 
 const specialityModel = new Schema({
@@ -415,38 +444,51 @@ const OTPModel = new Schema(
     expireAt: { type: Date, default: Date.now, index: { expires: "2m" } },
     attempt: { type: Number, default: 0 },
   },
-  { timestamp: true }
+  { timestamps: true }
 );
 global.OTP = mongoose.model("OTP", OTPModel);
 
-const deliveryStaffModel = new Schema({
-  name: { type: String, required: true },
-  phone: { type: String, required: true, unique: true },
-  email: { type: String, unique: true, sparse: true },
-  pass: { type: String, required: true },
-  legalDocuments: [{ type: String }],
-  age: { type: String },
-  gender: { type: Number },
-  location: {
-    type: { type: String, enum: ["Point"] },
-    coordinates: { type: [Number] },
-  },
-  healthStatus: { type: String },
-  profileImg: { type: String },
-  available: { type: Boolean, default: false },
-  active: { type: Boolean, default: true },
-  onDelivery: { type: Boolean, default: false },
-  rating: {
-    totalRating: { type: Number, default: 0 },
-    reviews: [
-      {
-        rating: { type: Number, required: true },
-        user: { type: Schema.Types.ObjectId, ref: "User", required: true },
-        feedback: { type: String },
-      },
+const deliveryStaffModel = new Schema(
+  {
+    name: { type: String, required: true },
+    phone: { type: String, required: true, unique: true },
+    email: { type: String, unique: true, sparse: true },
+    pass: { type: String, required: true },
+    legalDocuments: [{ type: String }],
+    age: { type: String },
+    gender: { type: Number },
+    location: {
+      type: { type: String, enum: ["Point"] },
+      coordinates: { type: [Number] },
+    },
+    healthStatus: { type: String },
+    profileImg: { type: String },
+    available: { type: Boolean, default: false },
+    active: { type: Boolean, default: true },
+    onDelivery: { type: Boolean, default: false },
+    rating: {
+      totalRating: { type: Number, default: 0 },
+      reviews: [
+        {
+          rating: { type: Number, required: true },
+          user: { type: Schema.Types.ObjectId, ref: "User", required: true },
+          feedback: { type: String },
+        },
+      ],
+    },
+    notifications: [
+      new Schema(
+        {
+          title: { type: String, required: true },
+          body: { type: String, required: true },
+          link: { type: String },
+        },
+        { timestamps: true }
+      ),
     ],
   },
-});
+  { timestamps: true }
+);
 deliveryStaffModel.statics.addFeedback = ({
   staff,
   rating,
