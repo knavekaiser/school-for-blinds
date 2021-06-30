@@ -144,8 +144,8 @@ app.get("/api/getSpeciality", (req, res) => {
 });
 
 // notification
-app.post("/subscribe", (req, res) => {
-  new NotificationSubscription({ ...req.body })
+app.post("/subscribe", passport.authenticate("userPrivate"), (req, res) => {
+  new NotificationSubscription({ ...req.body, client: req.user._id })
     .save()
     .then((dbRes) => {
       res.status(200).json({ message: "successfully subscribed" });
@@ -154,8 +154,8 @@ app.post("/subscribe", (req, res) => {
       res.status(500).json({ message: "something went wrong" });
     });
 });
-app.delete("/unsubscribe", (req, res) => {
-  NotificationSubscription.findByIdAndDelete(req.body._id)
+app.delete("/unsubscribe", passport.authenticate("userPrivate"), (req, res) => {
+  NotificationSubscription.findOneAndDelete({ client: req.user._id })
     .then((dbRes) => {
       res.status(200).json({ message: "successfully unsubscribed" });
     })
@@ -169,6 +169,6 @@ app.use(express.static("public"));
 const socketIO = require("socket.io");
 const io = socketIO(
   app.listen(PORT, () => {
-    console.log("user/vendor backend listening to port:", PORT);
+    console.log("user backend listening to port:", PORT);
   })
 );

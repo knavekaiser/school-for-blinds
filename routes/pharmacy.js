@@ -117,25 +117,56 @@ app.post(
       discount,
       prescriptions,
       address,
+      shop,
     } = req.body;
-    new Order({
-      ...req.body,
-      customer: req.user._id,
-    })
-      .save()
-      .then((order) => {
-        if (order) {
-          res.json("order has been placed");
-          order.products.forEach(async (item) => {
-            await Product.findById(item.product).then((dbProduct) =>
-              Product.findByIdAndUpdate(dbProduct._id, {
-                available: dbProduct.available - item.qty,
-              })
-            );
+    if (products && vendor && total && shop) {
+      Product.find({
+        $or: req.body.products.map((pr) => ({ _id: pr.product })),
+      })
+        .then((fullProducts) => {
+          const order = new Order({
+            ...req.body,
+            products: fullProducts.map((prod) => {
+              return {
+                ...prod._doc,
+                qty: products.filter(
+                  (pr) => pr.product === prod._id.toString()
+                )[0].qty,
+              };
+            }),
+            customer: { ...req.user._doc },
           });
-        } else {
+          return order.save();
+        })
+        .then((order) => {
+          if (order) {
+            res.json("order has been placed");
+            order.products.forEach(async (item) => {
+              await Product.findOneAndUpdate(
+                { _id: item._id },
+                { $inc: { available: -Math.abs(item.qty) } }
+              );
+            });
+          } else {
+            res.status(500).json({ message: "something went wrong" });
+          }
+        })
+        .catch((err) => {
+          console.log(err);
           res.status(500).json({ message: "something went wrong" });
-        }
+        });
+    } else {
+      res.status(400).json({ message: "incomplete request" });
+    }
+  }
+);
+app.get(
+  "/api/getAllOrders",
+  passport.authenticate("userPrivate"),
+  (req, res) => {
+    Order.find({ "customer._id": req.user._id })
+      .then((dbRes) => {
+        res.json(dbRes);
       })
       .catch((err) => {
         console.log(err);
@@ -151,57 +182,60 @@ app.post(
     const { amount, paymentMethod, order, transactionId } = req.body;
     Promise.all([
       razorpay.payments.fetch(transactionId),
-      Order.findOne({ _id: order }),
-    ]).then(([razorRes, order]) => {
-      if (razorRes && order) {
-        new PaymentLedger({
-          type: "collection",
-          user: req.user._id,
-          amount,
-          paymentMethod,
-          note: "store payment", // specific for this route
-          transactionId,
-          product: order,
-        })
-          .save()
-          .then((dbRes) => {
-            if (dbRes) {
-              return Order.findOneAndUpdate({ _id: order }, { paid: true });
-            } else {
-              return null;
-            }
+      Order.findOne({ _id: order, "customer._id": req.user._id }),
+    ])
+      .then(([razorRes, order]) => {
+        if (razorRes && order) {
+          new ShopLedger({
+            ...req.body,
+            type: "collection",
+            user: req.user._id,
+            note: "store payment", // specific for this route
+            product: order,
           })
-          .then((update) => {
-            if (update) {
-              res.json({ message: "payment successful" });
-              notify(
-                update.vendor,
-                JSON.stringify({
-                  title: "Payment recieved!",
-                  body: "Payment recieved for an order.",
-                }),
-                "Vendor"
-              );
-            } else {
-              res.status(400).json({ message: "something went wrong" });
-            }
-          })
-          .catch((err) => {
-            if (err.code === 11000) {
-              res.status(400).json({
-                message: "transaction id found in the database",
-                code: err.code,
-                field: Object.keys(err.keyValue)[0],
-              });
-            } else {
-              console.log(err);
-              res.status(500).json({ message: "something went wrong" });
-            }
-          });
-      } else {
-        res.status(400).json({ message: "bad request" });
-      }
-    });
+            .save()
+            .then((dbRes) => {
+              if (dbRes) {
+                return Order.findOneAndUpdate({ _id: order }, { paid: true });
+              } else {
+                return null;
+              }
+            })
+            .then((update) => {
+              if (update) {
+                res.json({ message: "payment successful" });
+                notify(
+                  update.vendor,
+                  JSON.stringify({
+                    title: "Payment recieved!",
+                    body: "Payment recieved for an order.",
+                  }),
+                  "Vendor"
+                );
+              } else {
+                res.status(400).json({ message: "something went wrong" });
+              }
+            })
+            .catch((err) => {
+              if (err.code === 11000) {
+                res.status(400).json({
+                  message: "transaction id found in the database",
+                  code: err.code,
+                  field: Object.keys(err.keyValue)[0],
+                });
+              } else {
+                console.log(err);
+                res.status(500).json({ message: "something went wrong" });
+              }
+            });
+        } else {
+          res.status(400).json({ message: "bad request" });
+        }
+      })
+      .catch((err) => {
+        console.log(err);
+        res.status(500).json({ message: "something went wrong" });
+      });
   }
 );
 app.get(
@@ -209,7 +243,7 @@ app.get(
   passport.authenticate("userPrivate", { failureRedirect: "/login" }),
   (req, res) => {
     if (req.user._id.toString() === req.params.user) {
-      Order.findOne({ customer: req.params.user, _id: req.params.order })
+      Order.findOne({ "customer._id": req.params.user, _id: req.params.order })
         .then((dbRes) => {
           if (dbRes) {
             res.json({ message: "contratulation, this order is yours" });

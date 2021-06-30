@@ -5,6 +5,9 @@ const productModel = new Schema(
     genericName: { type: String },
     dscr: { type: String },
     brand: { type: String, required: true },
+    batch: { type: String },
+    mfg: { type: Date },
+    exp: { type: Date },
     price: { type: Number, required: true },
     prescriptionRequired: { type: Boolean, default: false },
     available: { type: Number, default: 0 },
@@ -32,6 +35,10 @@ const productModel = new Schema(
       ],
     },
     category: { type: String },
+    shop: { type: Schema.Types.ObjectId, required: true },
+    taxable: { type: Boolean },
+    cgst: { type: Number },
+    sgst: { type: Number },
   },
   { timestamps: true }
 );
@@ -65,11 +72,19 @@ const orderModel = new Schema(
   {
     products: [
       {
-        product: {
-          type: Schema.Types.ObjectId,
-          ref: "Product",
-          required: true,
-        },
+        name: { type: String, required: true },
+        genericName: { type: String },
+        pack: { type: String },
+        hsnCode: { type: String },
+        mfrs: { type: String },
+        batch: { type: String },
+        price: { type: String },
+        discount: {},
+        sgst: { type: String },
+        sgst: { type: String },
+        taxable: { type: Boolean },
+        dsrc: { type: String },
+        brand: { type: String },
         qty: { type: Number, default: 1 },
       },
     ],
@@ -82,12 +97,19 @@ const orderModel = new Schema(
       dscr: { type: String },
     },
     approved: { type: Boolean, default: false },
-    shipped: { type: Boolean, default: false },
+    ready: { type: Boolean, default: false },
     delivered: { type: Boolean, default: false },
     paid: { type: Boolean, default: false },
     cancelled: { type: Boolean, default: false },
     prescriptions: [{ type: String }],
-    customer: { type: Schema.Types.ObjectId, ref: "User" },
+    customer: {
+      _id: { type: Schema.Types.ObjectId, ref: "User" },
+      name: { type: String, required: true },
+      age: { type: Number },
+      gender: { type: String },
+      address: {},
+      phone: { type: String },
+    },
     address: {
       street: { type: String },
       city: { type: String },
@@ -98,7 +120,10 @@ const orderModel = new Schema(
       },
     },
     deliveryStaff: { type: Schema.Types.ObjectId, ref: "DeliveryStaff" },
+    deliveryMethod: { type: String },
     commission: { type: Number },
+    shop: { type: Schema.Types.ObjectId, ref: "vendor.shop", required: true },
+    userApproved: { type: Boolean, default: true },
   },
   { timestamps: true }
 );

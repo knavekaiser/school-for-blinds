@@ -311,7 +311,7 @@ app.patch("/api/userResetPass", async (req, res) => {
 });
 
 app.get(
-  "/api/getAllPayments",
+  "/api/getAllLedgers",
   passport.authenticate("userPrivate"),
   (req, res) => {
     PaymentLedger.find({ user: req.user._id })
@@ -322,5 +322,148 @@ app.get(
         console.log(err);
         res.status(500).json({ message: "something went wrong" });
       });
+  }
+);
+app.get(
+  "/api/getSingleLedger",
+  passport.authenticate("userPrivate"),
+  (req, res) => {
+    if (req.query._id) {
+      PaymentLedger.aggregate([
+        { $match: { _id: ObjectId(req.query._id) } },
+        {
+          $lookup: {
+            from: "books",
+            as: "bookings",
+            localField: "product",
+            foreignField: "_id",
+          },
+        },
+        {
+          $lookup: {
+            from: "chats",
+            as: "chats",
+            localField: "product",
+            foreignField: "_id",
+          },
+        },
+        {
+          $lookup: {
+            from: "teleconsults",
+            as: "tele",
+            localField: "product",
+            foreignField: "_id",
+          },
+        },
+        {
+          $lookup: {
+            from: "orders",
+            as: "orders",
+            localField: "product",
+            foreignField: "_id",
+          },
+        },
+        {
+          $lookup: {
+            from: "diagnosticbookings",
+            as: "diagnostics",
+            localField: "product",
+            foreignField: "_id",
+          },
+        },
+        {
+          $set: {
+            product: {
+              $switch: {
+                branches: [
+                  {
+                    case: {
+                      $eq: [
+                        {
+                          $size: "$bookings",
+                        },
+                        1,
+                      ],
+                    },
+                    then: {
+                      $first: "$bookings",
+                    },
+                  },
+                  {
+                    case: {
+                      $eq: [
+                        {
+                          $size: "$orders",
+                        },
+                        1,
+                      ],
+                    },
+                    then: {
+                      $first: "$orders",
+                    },
+                  },
+                  {
+                    case: {
+                      $eq: [
+                        {
+                          $size: "$chats",
+                        },
+                        1,
+                      ],
+                    },
+                    then: {
+                      $first: "$chats",
+                    },
+                  },
+                  {
+                    case: {
+                      $eq: [
+                        {
+                          $size: "$tele",
+                        },
+                        1,
+                      ],
+                    },
+                    then: {
+                      $first: "$tele",
+                    },
+                  },
+                  {
+                    case: {
+                      $eq: [
+                        {
+                          $size: "$diagnostics",
+                        },
+                        1,
+                      ],
+                    },
+                    then: {
+                      $first: "$diagnostics",
+                    },
+                  },
+                ],
+                default: null,
+              },
+            },
+          },
+        },
+        {
+          $unset: ["bookings", "chats", "tele", "orders", "diagnostics"],
+        },
+      ])
+        .then((dbRes) => {
+          if (dbRes.length) {
+            res.json(dbRes[0]);
+          } else {
+            res.status(400).json({ message: "bad request" });
+          }
+        })
+        .catch((err) => {
+          console.log(err);
+          res.status(500).json({ message: "something went wrong" });
+        });
+    } else {
+      res.status(400).json({ message: "bad request" });
+    }
   }
 );

@@ -1,19 +1,3 @@
-const clientToClientLedgerModel = new Schema(
-  {
-    from: { type: Schema.Types.ObjectId, required: true },
-    to: { type: Schema.Types.ObjectId, required: true },
-    amount: { type: Number, required: true },
-    note: { type: String },
-    paymentMethod: { type: String },
-    transactionId: { type: String },
-  },
-  { timestamps: true }
-);
-global.ClientToClientLedger = mongoose.model(
-  "ClientToClientLedger",
-  clientToClientLedgerModel
-);
-
 const paymentLedgerModel = new Schema(
   {
     type: { type: String, enum: ["collection", "imbursement"], required: true },
@@ -27,6 +11,54 @@ const paymentLedgerModel = new Schema(
   { timestamps: true }
 );
 global.PaymentLedger = mongoose.model("PaymentLedger", paymentLedgerModel);
+
+global.ShopLedger = PaymentLedger.discriminator(
+  "ShopLedger",
+  new Schema({
+    shop: {
+      name: { type: String },
+      address: {},
+      phone: { type: String },
+      email: { type: String },
+      gstin: { type: String },
+      dl: { type: String },
+      branch: { type: String },
+    },
+    customer: {
+      name: { type: String },
+      address: {},
+      phone: { type: String },
+    },
+    refDoctor: {
+      name: { type: String },
+      regNo: { type: String },
+    },
+  })
+);
+
+global.DoctorLedger = PaymentLedger.discriminator(
+  "DoctorLedger",
+  new Schema({
+    clinic: {
+      name: { type: String },
+    },
+    doctor: {
+      name: { type: String },
+      education: { type: String },
+      speciality: { type: String },
+      regNo: { type: String },
+      about: { type: String },
+    },
+    patient: {
+      name: { type: String },
+      age: { type: String },
+      gender: { type: String },
+      phone: { type: String },
+    },
+    consultant: { type: String },
+    officeId: { type: String },
+  })
+);
 
 const payoutModel = new Schema(
   {

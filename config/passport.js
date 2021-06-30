@@ -1,8 +1,8 @@
 const LocalStrategy = require("passport-local").Strategy;
-// const GoogleStrategy = require("passport-google-oauth2").Strategy;
+const GoogleStrategy = require("passport-google-oauth2").Strategy;
 const JwtStrategy = require("passport-jwt").Strategy;
 const ExtractJwt = require("passport-jwt").ExtractJwt;
-// const FacebookStrategy = require("passport-facebook").Strategy;
+const FacebookStrategy = require("passport-facebook").Strategy;
 const cookieExtractor = (req) => {
   let token = null;
   if (req && req.cookies) {
@@ -69,109 +69,55 @@ passport.use(
   )
 );
 
-// ----------------- Vendors
+// ----------------- OAuth
 passport.use(
-  "vendor",
-  new LocalStrategy((username, password, next) => {
-    Vendor.findOne({ $or: [{ email: username }, { phone: username }] })
-      .then((user) => {
-        if (user && bcrypt.compareSync(password, user.pass))
-          return next(null, user);
-        return next(null, false);
-      })
-      .catch((err) => next(err, false));
-  })
-);
-passport.use(
-  "vendorPrivate",
-  new JwtStrategy(
-    { jwtFromRequest: cookieExtractor, secretOrKey: process.env.JWT_SECRET },
-    (payload, next) => {
-      Vendor.findOne({ _id: payload.sub })
-        .then((user) => (user ? next(null, user) : next(null, false)))
-        .catch((err) => next(err, false));
+  new GoogleStrategy(
+    {
+      clientID: process.env.GOOGLE_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      callbackURL: "http://localhost:3003/googleAuthcalllback",
+      passReqToCallback: true,
+    },
+    function (request, accessToken, refreshToken, profile, done) {
+      User.findOne({ email: profile.email }).then((user) => {
+        if (user) {
+          return done(null, user);
+        } else {
+          return done(null, null);
+        }
+      });
     }
   )
 );
-
-// ----------------- Vendor OAuth
-// passport.use(
-//   "vendorGoogle",
-//   new GoogleStrategy(
-//     {
-//       clientID: process.env.GOOGLE_CLIENT_ID,
-//       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-//       callbackURL: "http://localhost:3001/googleAuthcalllback",
-//       passReqToCallback: true,
-//     },
-//     function (request, accessToken, refreshToken, profile, done) {
-//       Vendor.findOne({ email: profile.email }).then((user) => {
-//         if (user) {
-//           return done(null, user);
-//         } else {
-//           return done(null, null);
-//         }
-//       });
-//     }
-//   )
-// );
-// passport.use(
-//   "vendorFacebook",
-//   new FacebookStrategy(
-//     {
-//       clientID: process.env.FACEBOOK_APP_ID,
-//       clientSecret: process.env.FACEBOOK_APP_SECRET,
-//       callbackURL: "http://localhost:3001/facebookAuthCallback",
-//     },
-//     function (accessToken, refreshToken, profile, done) {
-//       console.log(profile);
-//       Vendor.findOne({ facebookId: profile.id }).then((user) => {
-//         if (user) {
-//           return done(null, user);
-//         } else {
-//           return done(null, null);
-//         }
-//       });
-//     }
-//   )
-// );
-
-// ----------------- Assistants
 passport.use(
-  "asst",
-  new LocalStrategy((username, password, next) => {
-    Assistant.findOne({ $or: [{ email: username }, { phone: username }] })
-      .then((user) => {
-        if (user && bcrypt.compareSync(password, user.pass))
-          return next(null, user);
-        return next(null, false);
-      })
-      .catch((err) => next(err, false));
-  })
-);
-passport.use(
-  "asstPrivate",
-  new JwtStrategy(
-    { jwtFromRequest: cookieExtractor, secretOrKey: process.env.JWT_SECRET },
-    (payload, next) => {
-      Assistant.findOne({ _id: payload.sub })
-        .then((user) => (user ? next(null, user) : next(null, false)))
-        .catch((err) => next(err, false));
+  new FacebookStrategy(
+    {
+      clientID: process.env.FACEBOOK_APP_ID,
+      clientSecret: process.env.FACEBOOK_APP_SECRET,
+      callbackURL: "http://localhost:3003/facebookAuthCallback",
+    },
+    function (accessToken, refreshToken, profile, done) {
+      console.log(profile);
+      User.findOne({ facebookId: profile.id }).then((user) => {
+        if (user) {
+          return done(null, user);
+        } else {
+          return done(null, null);
+        }
+      });
     }
   )
 );
 
 passport.serializeUser((userData, next) => {
   const user = {
-    type: userData.type ? "vendor" : userData.employeeId ? "asst" : "user",
+    type: "user",
     userId: userData._id,
   };
   return next(null, user);
 });
 passport.deserializeUser((user, next) => {
-  const Model =
-    user.type === "vendor" ? Vendor : user.type === "asst" ? Assistant : User;
-  Model.findById({ $or: [{ email: user._id }, { phone: user._id }] })
+  User.findById({ $or: [{ email: user._id }, { phone: user._id }] })
     .then((user) => next(null, user))
     .catch((err) => {
       console.log(err);

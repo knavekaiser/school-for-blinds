@@ -343,60 +343,72 @@ app.post(
   "/api/createLedgerForAppointmentUser",
   passport.authenticate("userPrivate"),
   (req, res) => {
-    const { amount, paymentMethod, book, transactionId } = req.body;
-    Promise.all([
-      razorpay.payments.fetch(transactionId),
-      Book.findOne({ _id: book }),
-    ]).then(([razorRes, book]) => {
-      if (razorRes && book._id) {
-        new PaymentLedger({
-          type: "collection",
-          user: req.user._id,
-          amount,
-          paymentMethod,
-          note: "payment for appointment", // specific for this route
-          transactionId,
-          product: book._id,
-        })
-          .save()
-          .then((dbRes) => {
-            if (dbRes) {
-              return Book.findOneAndUpdate({ _id: book }, { paid: true });
-            } else {
-              return null;
-            }
+    const {
+      amount,
+      paymentMethod,
+      appointment,
+      patient,
+      transactionId,
+    } = req.body;
+    if (amount && paymentMethod && appointment && patient && transactionId) {
+      Promise.all([
+        // razorpay.payments.fetch(transactionId),
+        55,
+        Book.findOne({ _id: appointment }),
+      ]).then(([razorRes, book]) => {
+        if (book) {
+          new DoctorLedger({
+            ...req.body,
+            type: "collection",
+            user: req.user._id,
+            note: "payment for appointment", // specific for this route
+            product: appointment,
           })
-          .then((update) => {
-            if (update) {
-              res.json({ message: "payment successful" });
-              notify(
-                update.vendor,
-                JSON.stringify({
-                  title: "Payment recieved!",
-                  body: "Payment recieved for appointment.",
-                }),
-                "Vendor"
-              );
-            } else {
-              res.status(400).json({ message: "something went wrong" });
-            }
-          })
-          .catch((err) => {
-            if (err.code === 11000) {
-              res.status(400).json({
-                message: "transaction id found in the database",
-                code: err.code,
-                field: Object.keys(err.keyValue)[0],
-              });
-            } else {
-              console.log(err);
-              res.status(500).json({ message: "something went wrong" });
-            }
-          });
-      } else {
-        res.status(400).json({ message: "bad request" });
-      }
-    });
+            .save()
+            .then((dbRes) => {
+              if (dbRes) {
+                return Book.findOneAndUpdate(
+                  { _id: appointment },
+                  { paid: true }
+                );
+              } else {
+                return null;
+              }
+            })
+            .then((update) => {
+              if (update) {
+                res.json({ message: "payment successful" });
+                notify(
+                  update.vendor,
+                  JSON.stringify({
+                    title: "Payment recieved!",
+                    body: "Payment recieved for appointment.",
+                  }),
+                  "Vendor"
+                );
+              } else {
+                res.status(400).json({ message: "something went wrong" });
+              }
+            })
+            .catch((err) => {
+              if (err.code === 11000) {
+                res.status(400).json({
+                  message: "transaction id found in the database",
+                  code: err.code,
+                  field: Object.keys(err.keyValue)[0],
+                });
+              } else {
+                console.log(err);
+                res.status(500).json({ message: "something went wrong" });
+              }
+            });
+        } else {
+          res.status(400).json({ message: "bad request" });
+        }
+      });
+    } else {
+      res.status(400).json({ message: "incomplete request" });
+    }
   }
 );
 
