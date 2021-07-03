@@ -61,6 +61,7 @@ app.get(
   passport.authenticate("userPrivate"),
   (req, res) => {
     User.aggregate([
+      { $match: { _id: ObjectId(req.user._id) } },
       {
         $lookup: {
           from: "chats",
