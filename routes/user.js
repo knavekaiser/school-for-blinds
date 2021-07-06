@@ -1,4 +1,9 @@
-const { handleSignIn, signingIn, signToken } = require("../config/passport.js");
+const {
+  handleSignIn,
+  signingIn,
+  signToken,
+  genCode,
+} = require("../config/passport.js");
 
 app.post("/api/registerUser", (req, res) => {
   const { name, phone, email, password, age, gender, address } = req.body;
