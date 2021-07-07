@@ -17,6 +17,7 @@ const URI = process.env.MONGO_URI;
 const path = require("path");
 const Razorpay = require("razorpay");
 const cors = require("cors");
+const socketIO = require("socket-io");
 
 global.razorpay = new Razorpay({
   key_id: process.env.RAZOR_PAY_ID,
@@ -166,7 +167,6 @@ app.delete("/unsubscribe", passport.authenticate("userPrivate"), (req, res) => {
 
 app.use(express.static("public"));
 
-const socketIO = require("socket-io");
 const io = socketIO(
   app.listen(PORT, () => {
     console.log("user backend listening to port:", PORT);
