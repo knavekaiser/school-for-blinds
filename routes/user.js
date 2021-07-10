@@ -76,7 +76,7 @@ app.get(
 );
 
 app.get(
-  "/api/viewUserPrfile",
+  "/api/viewUserProfile",
   passport.authenticate("userPrivate"),
   (req, res) => {
     User.aggregate([
