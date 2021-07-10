@@ -74,46 +74,56 @@ app.get("/api/findVendorsForTeleConsult", (req, res) => {
     },
   ])
     .then((dbRes) => {
-      res.json(dbRes[0]);
+      res.json({ code: "ok", ...dbRes[0] });
     })
     .catch((err) => {
       console.log(err);
-      res.status(500).json({ message: "something went wrong" });
+      res.status(500).json({ code: 500, message: "database error", err });
     });
 });
 app.post(
   "/api/bookTeleConsult",
   passport.authenticate("userPrivate"),
   (req, res) => {
-    const { date, vendor, token, user, charge, sessionLength } = req.body;
-    new TeleConsult({
-      token,
-      date,
-      vendor,
-      user,
-      charge,
-      sessionLength,
-    })
-      .save()
-      .then((dbRes) => {
-        if (dbRes) {
-          res.json(dbRes);
-          notify(
-            dbRes.vendor,
-            JSON.stringify({
-              title: "Tele Consult!",
-              body: "Someone booked a tele consult session.",
-            }),
-            "Vendor"
-          );
-        } else {
-          res.status(400).json({ message: "bad request" });
-        }
+    const { date, vendor, token, charge, sessionLength } = req.body;
+    if (token && date && vendor && sessionLength) {
+      new TeleConsult({
+        token,
+        date,
+        vendor,
+        user: req.user._id,
+        charge,
+        sessionLength,
       })
-      .catch((err) => {
-        console.log(err);
-        res.status(500).json({ message: "something went wrong" });
+        .save()
+        .then((dbRes) => {
+          if (dbRes) {
+            res.json({ code: "ok", bookingInfo: dbRes });
+            notify(
+              dbRes.vendor,
+              JSON.stringify({
+                title: "Tele Consult!",
+                body: "Someone booked a tele consult session.",
+              }),
+              "Vendor"
+            );
+          } else {
+            res.status(500).json({ code: 500, message: "database error" });
+          }
+        })
+        .catch((err) => {
+          console.log(err);
+          res.status(500).json({ code: 500, message: "database error", err });
+        });
+    } else {
+      res.status(500).json({
+        code: 500,
+        message: "missing fields",
+        requiredFields: "token, date, vendor, sessionLength",
+        fieldsFound: req.body,
+        success: false,
       });
+    }
   }
 );
 app.patch(
@@ -126,14 +136,20 @@ app.patch(
     )
       .then((dbRes) => {
         if (dbRes) {
-          res.json({ message: "booking updated" });
+          res.json({
+            code: "ok",
+            message: "booking updated",
+            bookingInfo: dbRes,
+          });
         } else {
-          res.json({ message: "bad request" });
+          res
+            .status(404)
+            .json({ code: 404, message: "booking does not exist" });
         }
       })
       .catch((err) => {
         console.log(err);
-        res.status(500).json({ message: "something went wrong" });
+        res.status(500).json({ code: 500, message: "database error" });
       });
   }
 );
@@ -148,7 +164,11 @@ app.patch(
     )
       .then((dbRes) => {
         if (dbRes) {
-          res.json({ message: "booking has been cancelled." });
+          res.json({
+            code: "ok",
+            message: "booking has been cancelled.",
+            bookingInfo: dbRes,
+          });
           notify(
             dbRes.vendor,
             JSON.stringify({
@@ -158,12 +178,14 @@ app.patch(
             "Vendor"
           );
         } else {
-          res.status(400).json({ message: "bad request" });
+          res
+            .status(404)
+            .json({ code: 404, message: "booking does not exist" });
         }
       })
       .catch((err) => {
         console.log(err);
-        res.status(500).json({ message: "something went wrong" });
+        res.status(500).json({ code: 500, message: "database error" });
       });
   }
 );
@@ -173,62 +195,94 @@ app.post(
   passport.authenticate("userPrivate"),
   (req, res) => {
     const { amount, paymentMethod, teleConsult, transactionId } = req.body;
-    Promise.all([
-      razorpay.payments.fetch(transactionId),
-      TeleConsult.findOne({ _id: teleConsult }),
-    ]).then(([razorRes, teleConsult]) => {
-      if (razorRes && teleConsult) {
-        new PaymentLedger({
-          type: "collection",
-          user: req.user._id,
-          amount,
-          paymentMethod,
-          note: "payment for teleConsult", // specific for this route
-          transactionId,
-          product: teleConsult._id,
-        })
-          .save()
-          .then((dbRes) => {
-            if (dbRes) {
-              return TeleConsult.findOneAndUpdate(
-                { _id: teleConsult },
-                { paid: true }
-              );
-            } else {
-              return null;
-            }
-          })
-          .then((update) => {
-            if (update) {
-              res.json({ message: "payment successful" });
-              notify(
-                update.vendor,
-                JSON.stringify({
-                  title: "Payment recieved!",
-                  body: "Payment recieved for tele consult appointment.",
-                }),
-                "Vendor"
-              );
-            } else {
-              res.status(400).json({ message: "something went wrong" });
-            }
-          })
-          .catch((err) => {
-            if (err.code === 11000) {
-              res.status(400).json({
-                message: "transaction id found in the database",
-                code: err.code,
-                field: Object.keys(err.keyValue)[0],
+    if (transactionId && amount && teleConsult) {
+      Promise.all([
+        razorpay.payments.fetch(transactionId),
+        TeleConsult.findOne({ _id: teleConsult }),
+      ])
+        .then(([razorRes, teleConsult]) => {
+          if (razorRes && teleConsult) {
+            new PaymentLedger({
+              type: "collection",
+              user: req.user._id,
+              amount,
+              paymentMethod,
+              note: "payment for teleConsult", // specific for this route
+              transactionId,
+              product: teleConsult._id,
+            })
+              .save()
+              .then((dbRes) => {
+                if (dbRes) {
+                  return TeleConsult.findOneAndUpdate(
+                    { _id: teleConsult },
+                    { paid: true },
+                    { new: true }
+                  );
+                } else {
+                  return null;
+                }
+              })
+              .then((update) => {
+                if (update) {
+                  res.json({
+                    code: "ok",
+                    message: "payment successful",
+                    bookingInfo: update,
+                  });
+                  notify(
+                    update.vendor,
+                    JSON.stringify({
+                      title: "Payment recieved!",
+                      body: "Payment recieved for tele consult appointment.",
+                    }),
+                    "Vendor"
+                  );
+                } else {
+                  res
+                    .status(400)
+                    .json({ code: 400, message: "database error" });
+                }
+              })
+              .catch((err) => {
+                if (err.code === 11000) {
+                  res.status(429).json({
+                    code: 429,
+                    message: "transaction id found in the database",
+                  });
+                } else {
+                  console.log(err);
+                  res
+                    .status(500)
+                    .json({ code: 500, message: "something went wrong" });
+                }
               });
-            } else {
-              console.log(err);
-              res.status(500).json({ message: "something went wrong" });
-            }
-          });
-      } else {
-        res.status(400).json({ message: "bad request" });
-      }
-    });
+          } else {
+            res.status(400).json({
+              code: 400,
+              message: "payment or teleConsult does not exist",
+            });
+          }
+        })
+        .catch((err) => {
+          if (err.statusCode === 400) {
+            res
+              .status(404)
+              .json({ code: 404, message: "payment does not exist" });
+          } else {
+            console.log(err);
+            res.status(500).json({ code: 500, message: "database error" });
+          }
+        });
+    } else {
+      res.status(400).json({
+        code: 400,
+        message: "missing fields",
+        requiredFields: "transactionId, amount, teleConsult",
+        fieldsFound: req.body,
+        success: false,
+      });
+    }
   }
 );
 
@@ -297,11 +351,11 @@ app.get(
       },
     ])
       .then((dbRes) => {
-        res.json(dbRes[0]);
+        res.json({ code: "ok", ...dbRes[0] });
       })
       .catch((err) => {
         console.log(err);
-        res.status(500).json({ message: "something went wrong" });
+        res.status(500).json({ code: 500, message: "something went wrong" });
       });
   }
 );
@@ -310,6 +364,13 @@ app.get(
   "/api/getSingleTeleConsultUser",
   passport.authenticate("userPrivate"),
   (req, res) => {
+    if (!req.query._id) {
+      res.status(400).json({
+        code: 400,
+        message: "tele consult _id is required in query parameter.",
+      });
+      return;
+    }
     const query = {
       user: ObjectId(req.user._id),
       _id: ObjectId(req.query._id),
@@ -343,14 +404,16 @@ app.get(
     ])
       .then((dbRes) => {
         if (dbRes.length) {
-          res.json(dbRes[0]);
+          res.json({ code: "ok", teleConsult: dbRes[0] });
         } else {
-          res.status(400).json({ message: "bad request" });
+          res
+            .status(404)
+            .json({ code: 404, message: "chat could not be found" });
         }
       })
       .catch((err) => {
         console.log(err);
-        res.status(500).json({ message: "something went wrong" });
+        res.status(500).json({ code: 500, message: "database error" });
       });
   }
 );

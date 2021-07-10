@@ -86,24 +86,24 @@ app.get("/api/findProducts", (req, res) => {
     },
   ])
     .then((products) => {
-      res.json(products[0]);
+      res.json({ code: "ok", ...products[0] });
     })
     .catch((err) => {
       console.log(err);
-      res.status(500).json({ message: "something went wrong" });
+      res.status(500).json({ code: 500, message: "database error" });
     });
 });
 app.get("/api/checkProductAvailability", (req, res) => {
   Product.findOne({ _id: req.query._id })
     .then((product) => {
       if (product) {
-        res.json({ available: product.available });
+        res.json({ code: "ok", available: product.available });
       } else {
-        res.json({ available: 0 });
+        res.json({ code: "ok", available: 0 });
       }
     })
     .catch((err) => {
-      res.status(500).json({ message: "something went wrong" });
+      res.status(500).json({ code: 500, message: "database error", err });
     });
 });
 app.post(
@@ -140,7 +140,7 @@ app.post(
         })
         .then((order) => {
           if (order) {
-            res.json("order has been placed");
+            res.json({ code: "ok", message: "order has been placed", order });
             order.products.forEach(async (item) => {
               await Product.findOneAndUpdate(
                 { _id: item._id },
@@ -148,15 +148,21 @@ app.post(
               );
             });
           } else {
-            res.status(500).json({ message: "something went wrong" });
+            res.status(500).json({ code: 500, message: "database error" });
           }
         })
         .catch((err) => {
           console.log(err);
-          res.status(500).json({ message: "something went wrong" });
+          res.status(500).json({ code: 500, message: "database error" });
         });
     } else {
-      res.status(400).json({ message: "incomplete request" });
+      res.status(400).json({
+        code: 400,
+        message: "missing fields",
+        requiredFields: "products, vendor, total, shop",
+        fieldsFound: req.body,
+        success: false,
+      });
     }
   }
 );
@@ -166,11 +172,11 @@ app.get(
   (req, res) => {
     Order.find({ "customer._id": req.user._id })
       .then((dbRes) => {
-        res.json(dbRes);
+        res.json({ code: "ok", orders: dbRes });
       })
       .catch((err) => {
         console.log(err);
-        res.status(500).json({ message: "something went wrong" });
+        res.status(500).json({ code: 500, message: "database error" });
       });
   }
 );
@@ -180,62 +186,83 @@ app.post(
   passport.authenticate("userPrivate"),
   (req, res) => {
     const { amount, paymentMethod, order, transactionId } = req.body;
-    Promise.all([
-      razorpay.payments.fetch(transactionId),
-      Order.findOne({ _id: order, "customer._id": req.user._id }),
-    ])
-      .then(([razorRes, order]) => {
-        if (razorRes && order) {
-          new ShopLedger({
-            ...req.body,
-            type: "collection",
-            user: req.user._id,
-            note: "store payment", // specific for this route
-            product: order,
-          })
-            .save()
-            .then((dbRes) => {
-              if (dbRes) {
-                return Order.findOneAndUpdate({ _id: order }, { paid: true });
-              } else {
-                return null;
-              }
+    if (transactionId && amount && order) {
+      Promise.all([
+        razorpay.payments.fetch(transactionId),
+        Order.findOne({ _id: order, "customer._id": req.user._id }),
+      ])
+        .then(([razorRes, order]) => {
+          if (razorRes && order) {
+            new ShopLedger({
+              ...req.body,
+              type: "collection",
+              user: req.user._id,
+              note: "store payment", // specific for this route
+              product: order,
             })
-            .then((update) => {
-              if (update) {
-                res.json({ message: "payment successful" });
-                notify(
-                  update.vendor,
-                  JSON.stringify({
-                    title: "Payment recieved!",
-                    body: "Payment recieved for an order.",
-                  }),
-                  "Vendor"
-                );
-              } else {
-                res.status(400).json({ message: "something went wrong" });
-              }
-            })
-            .catch((err) => {
-              if (err.code === 11000) {
-                res.status(400).json({
-                  message: "transaction id found in the database",
-                  code: err.code,
-                  field: Object.keys(err.keyValue)[0],
-                });
-              } else {
-                console.log(err);
-                res.status(500).json({ message: "something went wrong" });
-              }
-            });
-        } else {
-          res.status(400).json({ message: "bad request" });
-        }
-      })
-      .catch((err) => {
-        console.log(err);
-        res.status(500).json({ message: "something went wrong" });
+              .save()
+              .then((dbRes) => {
+                if (dbRes) {
+                  return Order.findOneAndUpdate({ _id: order }, { paid: true });
+                } else {
+                  return null;
+                }
+              })
+              .then((update) => {
+                if (update) {
+                  res.json({ code: "ok", message: "payment successful" });
+                  notify(
+                    update.vendor,
+                    JSON.stringify({
+                      title: "Payment recieved!",
+                      body: "Payment recieved for an order.",
+                    }),
+                    "Vendor"
+                  );
+                } else {
+                  res
+                    .status(400)
+                    .json({ code: 400, message: "database error" });
+                }
+              })
+              .catch((err) => {
+                if (err.code === 11000) {
+                  res.status(429).json({
+                    code: 429,
+                    message: "transaction id found in the database",
+                  });
+                } else {
+                  console.log(err);
+                  res
+                    .status(500)
+                    .json({ code: 500, message: "something went wrong", err });
+                }
+              });
+          } else {
+            res
+              .status(404)
+              .json({ code: 404, message: "payment or order does not exist" });
+          }
+        })
+        .catch((err) => {
+          if (err.statusCode === 400) {
+            res
+              .status(404)
+              .json({ code: 404, message: "payment does not exist" });
+          } else {
+            console.log(err);
+            res.status(500).json({ code: 500, message: "database error" });
+          }
+        });
+    } else {
+      res.status(400).json({
+        code: 400,
+        message: "missing fields",
+        requiredFields: "transactionId, amount, order",
+        fieldsFound: req.body,
+        success: false,
       });
+    }
   }
 );
 app.get(
@@ -246,17 +273,22 @@ app.get(
       Order.findOne({ "customer._id": req.params.user, _id: req.params.order })
         .then((dbRes) => {
           if (dbRes) {
-            res.json({ message: "contratulation, this order is yours" });
+            res.json({
+              code: "ok",
+              message: "contratulation, this order is yours",
+            });
           } else {
-            res.json({ message: "bad request" });
+            res
+              .status(404)
+              .json({ code: 404, message: "order does not exist" });
           }
         })
         .catch((err) => {
           console.log(err);
-          res.status(500).json({ message: "something went wrong" });
+          res.status(500).json({ code: 500, message: "something went wrong" });
         });
     } else {
-      res.status(403).json({ message: "forbidden" });
+      res.status(403).json({ code: 403, message: "forbidden" });
     }
   }
 );
@@ -267,20 +299,30 @@ app.post(
   (req, res) => {
     const { staff, rating, feedback } = req.body;
     const user = req.user._id;
-    DeliveryStaff.addFeedback({ staff, rating, user, feedback })
-      .then((dbRes) => {
-        res.json({ message: "feedback posted" });
-      })
-      .catch((err) => {
-        if (err === "forbidden") {
-          res.status(400).json({
-            message: "you didn't complete any session with this doctor",
-          });
-        } else {
-          console.log(err);
-          res.status(500).json({ message: "something went wrong" });
-        }
+    if (staff && rating && feedback) {
+      DeliveryStaff.addFeedback({ staff, rating, user, feedback })
+        .then((dbRes) => {
+          res.json({ code: "ok", message: "feedback posted" });
+        })
+        .catch((err) => {
+          if (err === "forbidden") {
+            res.status(400).json({
+              code: 403,
+              message: "you didn't complete any session with this doctor",
+            });
+          } else {
+            console.log(err);
+            res.status(500).json({ code: 500, message: "database error" });
+          }
+        });
+    } else {
+      res.status(400).json({
+        code: 400,
+        requiredFields: "staff, rating, feedback",
+        fieldsFound: req.body,
+        success: false,
       });
+    }
   }
 );
 app.patch(
@@ -289,14 +331,23 @@ app.patch(
   (req, res) => {
     const { staff, rating, feedback } = req.body;
     const user = req.user._id;
-    DeliveryStaff.addFeedback({ staff, rating, user, feedback })
-      .then((dbRes) => {
-        res.json({ message: "feedback posted" });
-      })
-      .catch((err) => {
-        console.log(err);
-        res.status(500).json({ message: "something went wrong" });
+    if (staff && rating && feedback) {
+      DeliveryStaff.addFeedback({ staff, rating, user, feedback })
+        .then((dbRes) => {
+          res.json({ message: "feedback posted" });
+        })
+        .catch((err) => {
+          console.log(err);
+          res.status(500).json({ message: "something went wrong" });
+        });
+    } else {
+      res.status(400).json({
+        code: 400,
+        requiredFields: "staff, rating, feedback",
+        fieldsFound: req.body,
+        success: false,
       });
+    }
   }
 );
 app.delete(
@@ -305,13 +356,17 @@ app.delete(
   (req, res) => {
     const { staff } = req.body;
     const user = req.user._id;
+    if (!staff) {
+      res.status(400).json({ code: 400, message: "staff is required" });
+      return;
+    }
     DeliveryStaff.deleteFeedback({ staff, user })
       .then((dbRes) => {
-        res.json({ message: "feedback deleted" });
+        res.json({ code: "ok", message: "feedback deleted" });
       })
       .catch((err) => {
         console.log(err);
-        res.status(500).json({ message: "something went wrong" });
+        res.status(500).json({ code: 500, message: "database error" });
       });
   }
 );

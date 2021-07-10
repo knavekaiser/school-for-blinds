@@ -74,43 +74,57 @@ app.get("/api/findVendorsForChat", (req, res) => {
     },
   ])
     .then((dbRes) => {
-      res.json(dbRes[0]);
+      res.json({ code: "ok", ...dbRes[0] });
     })
     .catch((err) => {
       console.log(err);
-      res.status(500).json({ message: "something went wrong" });
+      res.status(500).json({ code: 500, message: "database error" });
     });
 });
 app.post("/api/bookChat", passport.authenticate("userPrivate"), (req, res) => {
-  const { date, vendor, token, user, charge, sessionLength } = req.body;
-  new Chat({
-    token,
-    date,
-    vendor,
-    user,
-    charge,
-    sessionLength,
-  })
-    .save()
-    .then((dbRes) => {
-      if (dbRes) {
-        res.json(dbRes);
-        notify(
-          dbRes.vendor,
-          JSON.stringify({
-            title: "Chat!",
-            body: "Someone booked a chat session.",
-          }),
-          "Vendor"
-        );
-      } else {
-        res.status(400).json({ message: "bad request" });
-      }
+  const { date, vendor, token, charge, sessionLength } = req.body;
+  if (token && date && vendor && sessionLength) {
+    new Chat({
+      token,
+      date,
+      vendor,
+      user: req.user._id,
+      charge,
+      sessionLength,
     })
-    .catch((err) => {
-      console.log(err);
-      res.status(500).json({ message: "something went wrong" });
+      .save()
+      .then((dbRes) => {
+        if (dbRes) {
+          res.json({
+            code: "ok",
+            message: "chat successfully booked",
+            bookingInfo: dbRes,
+          });
+          notify(
+            dbRes.vendor,
+            JSON.stringify({
+              title: "Chat!",
+              body: "Someone booked a chat session.",
+            }),
+            "Vendor"
+          );
+        } else {
+          res.status(400).json({ code: 400, message: "database error" });
+        }
+      })
+      .catch((err) => {
+        console.log(err);
+        res.status(500).json({ code: 500, message: "database error" });
+      });
+  } else {
+    res.status(500).json({
+      code: 500,
+      message: "missing fields",
+      requiredFields: "token, date, vendor, sessionLength",
+      fieldsFound: req.body,
+      success: false,
     });
+  }
 });
 
 app.patch(
@@ -119,18 +133,25 @@ app.patch(
   (req, res) => {
     Chat.findOneAndUpdate(
       { _id: req.body._id, user: req.user._id },
-      { ...req.body }
+      { ...req.body },
+      { new: true }
     )
       .then((dbRes) => {
         if (dbRes) {
-          res.json({ message: "booking updated" });
+          res.json({
+            code: "ok",
+            message: "booking updated",
+            bookingInfo: dbRes,
+          });
         } else {
-          res.json({ message: "bad request" });
+          res
+            .status(404)
+            .json({ code: 404, message: "booking does not exist" });
         }
       })
       .catch((err) => {
         console.log(err);
-        res.status(500).json({ message: "something went wrong" });
+        res.status(500).json({ code: 500, message: "database error" });
       });
   }
 );
@@ -141,11 +162,16 @@ app.patch(
   (req, res) => {
     Chat.findOneAndUpdate(
       { _id: req.body._id, user: req.user._id, completed: false },
-      { cancelled: true }
+      { cancelled: true },
+      { new: true }
     )
       .then((dbRes) => {
         if (dbRes) {
-          res.json({ message: "booking has been cancelled." });
+          res.json({
+            code: "ok",
+            message: "booking has been cancelled.",
+            bookingInfo: dbRes,
+          });
           notify(
             dbRes.vendor,
             JSON.stringify({
@@ -155,12 +181,14 @@ app.patch(
             "Vendor"
           );
         } else {
-          res.status(400).json({ message: "bad request" });
+          res
+            .status(404)
+            .json({ code: 404, message: "booking does not exist" });
         }
       })
       .catch((err) => {
         console.log(err);
-        res.status(500).json({ message: "something went wrong" });
+        res.status(500).json({ code: 500, message: "database error" });
       });
   }
 );
@@ -170,59 +198,95 @@ app.post(
   passport.authenticate("userPrivate"),
   (req, res) => {
     const { amount, paymentMethod, chat, transactionId } = req.body;
-    Promise.all([
-      razorpay.payments.fetch(transactionId),
-      Chat.findOne({ _id: chat }),
-    ]).then(([razorRes, chat]) => {
-      if (razorRes && chat) {
-        new PaymentLedger({
-          type: "collection",
-          user: req.user._id,
-          amount,
-          paymentMethod,
-          note: "payment for chat", // specific for this route
-          transactionId,
-          product: chat._id,
-        })
-          .save()
-          .then((dbRes) => {
-            if (dbRes) {
-              return Chat.findOneAndUpdate({ _id: chat }, { paid: true });
-            } else {
-              return null;
-            }
-          })
-          .then((update) => {
-            if (update) {
-              res.json({ message: "payment successful" });
-              notify(
-                update.vendor,
-                JSON.stringify({
-                  title: "Payment recieved!",
-                  body: "Payment recieved for chat appointment.",
-                }),
-                "Vendor"
-              );
-            } else {
-              res.status(400).json({ message: "something went wrong" });
-            }
-          })
-          .catch((err) => {
-            if (err.code === 11000) {
-              res.status(400).json({
-                message: "transaction id found in the database",
-                code: err.code,
-                field: Object.keys(err.keyValue)[0],
+    if (transactionId && amount && chat) {
+      Promise.all([
+        razorpay.payments.fetch(transactionId),
+        Chat.findOne({ _id: chat }),
+      ])
+        .then(([razorRes, chat]) => {
+          if (razorRes && chat) {
+            new PaymentLedger({
+              type: "collection",
+              user: req.user._id,
+              amount,
+              paymentMethod,
+              note: "payment for chat", // specific for this route
+              transactionId,
+              product: chat._id,
+            })
+              .save()
+              .then((dbRes) => {
+                if (dbRes) {
+                  return Chat.findOneAndUpdate(
+                    { _id: chat },
+                    { paid: true },
+                    { new: true }
+                  );
+                } else {
+                  return null;
+                }
+              })
+              .then((update) => {
+                if (update) {
+                  res.json({
+                    code: "ok",
+                    message: "payment successful",
+                    bookingInfo: update,
+                  });
+                  notify(
+                    update.vendor,
+                    JSON.stringify({
+                      title: "Payment recieved!",
+                      body: "Payment recieved for chat appointment.",
+                    }),
+                    "Vendor"
+                  );
+                } else {
+                  res
+                    .status(500)
+                    .json({ code: 500, message: "database error" });
+                }
+              })
+              .catch((err) => {
+                if (err.code === 11000) {
+                  res.status(429).json({
+                    code: 429,
+                    message: "transaction id found in the database",
+                    success: false,
+                  });
+                } else {
+                  console.log(err);
+                  res
+                    .status(500)
+                    .json({ code: 500, message: "something went wrong" });
+                }
               });
-            } else {
-              console.log(err);
-              res.status(500).json({ message: "something went wrong" });
-            }
-          });
-      } else {
-        res.status(400).json({ message: "bad request" });
-      }
-    });
+          } else {
+            res.status(404).json({
+              code: 404,
+              message: "payment or chat could not be found.",
+            });
+          }
+        })
+        .catch((err) => {
+          if (err.statusCode === 400) {
+            res
+              .status(404)
+              .json({ code: 404, message: "payment does not exist" });
+          } else {
+            console.log(err);
+            res.status(500).json({ code: 500, message: "database error" });
+          }
+        });
+    } else {
+      res.status(400).json({
+        code: 400,
+        message: "missing fields",
+        requiredFields: "transactionId, amount, booking",
+        fieldsFound: req.body,
+        success: false,
+      });
+    }
   }
 );
 
@@ -291,11 +355,11 @@ app.get(
       },
     ])
       .then((dbRes) => {
-        res.json(dbRes[0]);
+        res.json({ code: "ok", ...dbRes[0] });
       })
       .catch((err) => {
         console.log(err);
-        res.status(500).json({ message: "something went wrong" });
+        res.status(500).json({ code: 500, message: "something went wrong" });
       });
   }
 );
@@ -307,6 +371,13 @@ app.get(
       user: ObjectId(req.user._id),
       _id: ObjectId(req.query._id),
     };
+    if (!req.query._id) {
+      res.status(400).json({
+        code: 400,
+        message: "chat _id is required in query parameter.",
+      });
+      return;
+    }
     Chat.aggregate([
       { $match: query },
       {
@@ -336,14 +407,16 @@ app.get(
     ])
       .then((dbRes) => {
         if (dbRes.length) {
-          res.json(dbRes[0]);
+          res.json({ code: "ok", chat: dbRes[0] });
         } else {
-          res.status(400).json({ message: "bad request" });
+          res
+            .status(404)
+            .json({ code: 404, message: "chat could not be found" });
         }
       })
       .catch((err) => {
         console.log(err);
-        res.status(500).json({ message: "something went wrong" });
+        res.status(500).json({ code: 500, message: "database error" });
       });
   }
 );

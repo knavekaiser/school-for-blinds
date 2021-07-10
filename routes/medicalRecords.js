@@ -19,11 +19,11 @@ app.get(
       },
     ])
       .then((dbRes) => {
-        res.json(dbRes[0]);
+        res.json({ code: "ok", ...dbRes[0] });
       })
       .catch((err) => {
         console.log(err);
-        res.json({ message: "something went wrong" });
+        res.status(500).json({ code: 500, message: "database error" });
       });
   }
 );
@@ -37,17 +37,21 @@ app.post(
         .save()
         .then((dbRes) => {
           if (dbRes) {
-            res.json({ message: "prescription added" });
+            res.json({
+              code: "ok",
+              message: "prescription added",
+              prescription: dbRes,
+            });
           } else {
-            res.status(400).json({ message: "bad request" });
+            res.status(500).json({ code: "ok", message: "database error" });
           }
         })
         .catch((err) => {
           console.log(err);
-          res.status(500).json({ message: "something went wrong" });
+          res.status(500).json({ code: 500, message: "database error" });
         });
     } else {
-      res.status(400).json({ message: "incomplete request" });
+      res.status(400).json({ code: 400, message: "img is required" });
     }
   }
 );
@@ -55,16 +59,33 @@ app.patch(
   "/api/updatePrescription",
   passport.authenticate("userPrivate"),
   (req, res) => {
+    if (!req.body._id) {
+      res
+        .status(400)
+        .json({ code: 400, message: "prescription _id is required" });
+      return;
+    }
     Prescription.findOneAndUpdate(
       { _id: req.body._id, user: req.user._id },
-      { ...req.body }
+      { ...req.body },
+      { new: true }
     )
       .then((dbRes) => {
-        res.json({ message: "prescription updated" });
+        if (dbRes) {
+          res.json({
+            code: "ok",
+            message: "prescription updated",
+            prescription: dbRes,
+          });
+        } else {
+          res
+            .status(404)
+            .json({ code: 404, message: "prescription could not be found" });
+        }
       })
       .catch((err) => {
         console.log(err);
-        res.status(500).json({ message: "something went wrong" });
+        res.status(500).json({ code: 500, message: "something went wrong" });
       });
   }
 );
@@ -75,15 +96,17 @@ app.delete(
     Prescription.findOneAndDelete({ _id: req.body._id, user: req.user._id })
       .then((dbRes) => {
         if (dbRes) {
-          res.json({ message: "prescription deleted" });
+          res.json({ code: "ok", message: "prescription deleted" });
           User.updatePrescription(dbRes.user);
         } else {
-          res.status(400).json({ message: "bad request" });
+          res
+            .status(404)
+            .json({ code: 404, message: "prescription could not be found" });
         }
       })
       .catch((err) => {
         console.log(err);
-        res.status(500).json({ message: "something went wrong" });
+        res.status(500).json({ code: 500, message: "database error" });
       });
   }
 );

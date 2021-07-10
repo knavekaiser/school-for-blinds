@@ -18,25 +18,39 @@ app.post("/api/registerUser", (req, res) => {
       })
       .then((dbRes) => {
         if (dbRes) {
-          signingIn(dbRes, res);
+          signingIn(dbRes._doc, res);
         } else {
-          res.status(500).json({ message: "something went wrong" });
+          res.status(500).json({
+            code: 500,
+            message: "Cound not save to database",
+            success: false,
+          });
         }
       })
       .catch((err) => {
         if (err.code === 11000) {
-          res.status(400).json({
-            message: "user exists",
-            code: err.code,
-            field: Object.keys(err.keyValue)[0],
+          res.status(409).json({
+            message: "phone or email already exists",
+            code: 409,
+            success: false,
           });
         } else {
           console.log(err);
-          res.status(500).json({ message: "something went wrong" });
+          res.status(500).json({
+            code: 500,
+            message: "database error",
+            success: false,
+          });
         }
       });
   } else {
-    res.status(400).json({ message: "Incomplete request" });
+    res.status(400).json({
+      code: 400,
+      message: "missing fields",
+      requiredFileds: "name, phone, email, password",
+      fieldsFound: req.body,
+      success: false,
+    });
   }
 });
 app.post(
@@ -54,7 +68,7 @@ app.get(
   (req, res) => {
     const user = { ...req.user._doc };
     ["pass", "__v"].forEach((key) => delete user[key]);
-    res.json({ code: "ok", user });
+    res.json({ code: "ok", user, message: "authentication success" });
   },
   (err, req, res, next) => {
     res.status(401).json({ code: 401, message: "invalid credentials" });
@@ -134,14 +148,14 @@ app.get(
     ])
       .then((dbRes) => {
         if (dbRes.length) {
-          res.json(dbRes[0]);
+          res.json({ code: "ok", user: dbRes[0] });
         } else {
-          res.status(400).json({ message: "bad request" });
+          res.status(404).json({ code: 404, message: "user does not exists" });
         }
       })
       .catch((err) => {
         console.log(err);
-        res.status(400).json({ message: "something went wrong" });
+        res.status(500).json({ code: 500, message: "database error" });
       });
   }
 );
@@ -149,13 +163,14 @@ app.patch(
   "/api/editUserProfile",
   passport.authenticate("userPrivate"),
   (req, res) => {
-    User.findOneAndUpdate({ _id: req.user._id }, { ...req.body })
-      .then((dbRes) => {
-        res.json({ message: "profile updated" });
+    User.findOneAndUpdate({ _id: req.user._id }, { ...req.body }, { new: true })
+      .then((user) => {
+        delete user._doc.pass;
+        res.json({ code: "ok", message: "profile updated", user: user._doc });
       })
       .catch((err) => {
         console.log(err);
-        res.status(500).json({ message: "something went wrong" });
+        res.status(500).json({ code: 500, message: "database error" });
       });
   }
 );
@@ -178,42 +193,51 @@ app.post("/api/sendUserOTP", async (req, res) => {
         if (dbRes) {
           // send text massage here
           res.json({
+            code: "ok",
             message: "6 digit code has been sent, enter it within 2 minutes",
+            success: true,
           });
         } else {
-          res.status(500).json({ message: "something went wrong" });
+          res.status(500).json({ code: 500, message: "database error" });
         }
       })
       .catch((err) => {
         console.log(err);
-        console.log("something went wrong");
+        res.status(500).json({ code: 500, message: "database error" });
       });
   } else {
-    res.status(400).json({ message: "invalid request" });
+    res.status(404).json({
+      code: 404,
+      message: "user does not exists",
+      success: false,
+    });
   }
 });
 app.put("/api/submitUserOTP", async (req, res) => {
   const { phone, code } = req.body;
   const dbOtp = await OTP.findOne({ id: phone });
   if (!dbOtp) {
-    res.status(404).json({ message: "code does not exists" });
+    res.status(404).json({ code: 404, message: "code does not exists" });
     return;
   }
   if (bcrypt.compareSync(code, dbOtp.code)) {
     User.findOne({ phone }).then((dbUser) => {
-      const user = JSON.parse(JSON.stringify(dbUser));
-      signingIn(user, res);
+      signingIn(dbUser._doc, res);
     });
   } else {
     if (dbOtp.attempt > 2) {
       OTP.findOneAndDelete({ id: phone }).then(() => {
-        res.status(429).json({ message: "start again" });
+        res
+          .status(403)
+          .json({ code: 403, message: "too many attempts, start again" });
       });
     } else {
       dbOtp.updateOne({ attempt: dbOtp.attempt + 1 }).then(() => {
-        res
-          .status(400)
-          .json({ message: "wrong code", attempt: dbOtp.attempt + 1 });
+        res.status(400).json({
+          code: 400,
+          message: "wrong code",
+          attempt: dbOtp.attempt + 1,
+        });
       });
     }
   }
@@ -237,25 +261,26 @@ app.post("/api/sendUserForgotPassOTP", async (req, res) => {
         if (dbRes) {
           // send text massage or email here
           res.json({
+            code: "ok",
             message: "6 digit code has been sent, enter it within 2 minutes",
+            success: true,
           });
         } else {
-          res.status(500).json({ message: "something went wrong" });
+          res.status(500).json({ code: 500, message: "database error" });
         }
       })
       .catch((err) => {
-        console.log(err);
-        console.log("something went wrong");
+        res.status(500).json({ code: 500, message: "database error" });
       });
   } else {
-    res.status(400).json({ message: "invalid request" });
+    res.status(400).json({ code: 400, message: "user does not exist" });
   }
 });
 app.put("/api/submitUserForgotPassOTP", async (req, res) => {
   const { phone, email, code } = req.body;
   const dbOtp = await OTP.findOne({ id: phone || email });
   if (!dbOtp) {
-    res.status(404).json({ message: "code does not exists" });
+    res.status(404).json({ code: 404, message: "code does not exists" });
     return;
   }
   if (bcrypt.compareSync(code, dbOtp.code)) {
@@ -264,22 +289,24 @@ app.put("/api/submitUserForgotPassOTP", async (req, res) => {
       { expireAt: new Date(new Date().getTime() + 120000) }
     )
       .then(() => {
-        res.json({ message: "OTP correct" });
+        res.json({ code: "ok", message: "OTP correct" });
       })
       .catch((err) => {
         console.log(err);
-        res.status(500).json({ message: "something went wrong" });
+        res.status(500).json({ code: 500, message: "database error" });
       });
   } else {
     if (dbOtp.attempt > 2) {
       OTP.findOneAndDelete({ id: phone || email }).then(() => {
-        res.status(429).json({ message: "start again" });
+        res.status(403).json({ code: 403, message: "too many attempts" });
       });
     } else {
       dbOtp.updateOne({ attempt: dbOtp.attempt + 1 }).then(() => {
-        res
-          .status(400)
-          .json({ message: "wrong code", attempt: dbOtp.attempt + 1 });
+        res.status(400).json({
+          code: 400,
+          message: "wrong code",
+          attempt: dbOtp.attempt + 1,
+        });
       });
     }
   }
@@ -288,7 +315,7 @@ app.patch("/api/userResetPass", async (req, res) => {
   const { phone, email, code, newPass } = req.body;
   const dbOtp = await OTP.findOne({ id: phone || email });
   if (!dbOtp) {
-    res.status(404).json({ message: "code does not exists" });
+    res.status(404).json({ code: 404, message: "code does not exists" });
     return;
   }
   if (bcrypt.compareSync(code, dbOtp.code)) {
@@ -298,19 +325,20 @@ app.patch("/api/userResetPass", async (req, res) => {
         User.findOneAndUpdate({ $or: [{ phone }, { email }] }, { pass: hash })
       )
       .then((dbUser) => {
-        const user = JSON.parse(JSON.stringify(dbUser));
-        signingIn(user, res);
+        signingIn(dbUser._doc, res);
       });
   } else {
     if (dbOtp.attempt > 2) {
       OTP.findOneAndDelete({ id: phone }).then(() => {
-        res.status(429).json({ message: "start again" });
+        res.status(403).json({ code: 403, message: "too many attempts" });
       });
     } else {
       dbOtp.updateOne({ attempt: dbOtp.attempt + 1 }).then(() => {
-        res
-          .status(400)
-          .json({ message: "wrong code", attempt: dbOtp.attempt + 1 });
+        res.status(400).json({
+          code: 400,
+          message: "wrong code",
+          attempt: dbOtp.attempt + 1,
+        });
       });
     }
   }
@@ -322,11 +350,11 @@ app.get(
   (req, res) => {
     PaymentLedger.find({ user: req.user._id })
       .then((dbRes) => {
-        res.json(dbRes);
+        res.json({ code: "ok", ledgers: dbRes });
       })
       .catch((err) => {
         console.log(err);
-        res.status(500).json({ message: "something went wrong" });
+        res.status(500).json({ code: 500, message: "datebase error" });
       });
   }
 );
@@ -459,17 +487,22 @@ app.get(
       ])
         .then((dbRes) => {
           if (dbRes.length) {
-            res.json(dbRes[0]);
+            res.json({ code: "ok", ledger: dbRes[0] });
           } else {
-            res.status(400).json({ message: "bad request" });
+            res
+              .status(404)
+              .json({ code: 404, message: "ledger does not exist" });
           }
         })
         .catch((err) => {
           console.log(err);
-          res.status(500).json({ message: "something went wrong" });
+          res.status(500).json({ code: 500, message: "database error" });
         });
     } else {
-      res.status(400).json({ message: "bad request" });
+      res.status(400).json({
+        code: 400,
+        message: "ledger _id is required",
+      });
     }
   }
 );

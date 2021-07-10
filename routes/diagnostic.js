@@ -67,15 +67,22 @@ app.get("/api/findDiagnostics", (req, res) => {
   ];
   Diagnostic.aggregate(pipeline)
     .then((diagnostic) => {
-      res.json(diagnostic[0]);
+      res.json({ code: "ok", ...diagnostic[0] });
     })
     .catch((err) => {
       console.log(err);
-      res.status(500).json({ message: "something went wrong" });
+      res.status(500).json({ code: 500, message: "database error" });
     });
 });
 app.get("/api/getDiagnosticDetail", (req, res) => {
   const { _id, userLocation } = req.query;
+  if (!_id) {
+    res.status(400).json({
+      code: 400,
+      message: "diagnostic _id is required in query parameter.",
+    });
+    return;
+  }
   Diagnostic.aggregate([
     ...(userLocation
       ? [
@@ -123,11 +130,17 @@ app.get("/api/getDiagnosticDetail", (req, res) => {
     },
   ])
     .then((diagnostic) => {
-      res.json(diagnostic[0]);
+      if (diagnostic.length) {
+        res.json({ code: "ok", diagnostic: diagnostic[0] });
+      } else {
+        res
+          .status(404)
+          .json({ code: 404, message: "diagnostic could not be found" });
+      }
     })
     .catch((err) => {
       console.log(err);
-      res.status(500).json({ message: "something went wrong" });
+      res.status(500).json({ code: 500, message: "database error", err });
     });
 });
 app.post(
@@ -137,7 +150,11 @@ app.post(
     new DiagnosticBooking({ ...req.body })
       .save()
       .then((dbRes) => {
-        res.json({ message: "diagnostic successfully booked" });
+        res.json({
+          code: "ok",
+          message: "diagnostic successfully booked",
+          bookingInfo: dbRes,
+        });
         Vendor.findOne({ _id: req.body.vendor }, "assistants")
           .populate("assistants")
           .then(({ assistants }) => {
@@ -157,7 +174,7 @@ app.post(
       })
       .catch((err) => {
         console.log(err);
-        res.status(500).json({ message: "something went wrong" });
+        res.status(500).json({ code: 500, message: "database error" });
       });
   }
 );
@@ -172,14 +189,16 @@ app.patch(
     )
       .then((dbRes) => {
         if (dbRes) {
-          res.json({ message: "booking updated" });
+          res.json({ code: "ok", message: "booking updated" });
         } else {
-          res.status(400).json({ message: "bad request" });
+          res
+            .status(404)
+            .json({ code: 404, message: "booking could not be found" });
         }
       })
       .catch((err) => {
         console.log(err);
-        res.status(500).json({ message: "something went wrong" });
+        res.status(500).json({ code: 500, message: "database error" });
       });
   }
 );
@@ -189,66 +208,93 @@ app.post(
   passport.authenticate("userPrivate"),
   (req, res) => {
     const { transactionId, amount, paymentMethod, booking } = req.body;
-    Promise.all([
-      razorpay.payments.fetch(transactionId),
-      DiagnosticBooking.findOne({ _id: booking }),
-    ])
-      .then(([razorRes, booking]) => {
-        if (razorRes && booking) {
-          new PaymentLedger({
-            type: "collection",
-            user: req.user._id,
-            amount,
-            paymentMethod,
-            note: "payment for diagnostics", // specific for this route
-            transactionId,
-            product: booking._id,
-          })
-            .save()
-            .then((dbRes) => {
-              if (dbRes) {
-                return DiagnosticBooking.findOneAndUpdate(
-                  { _id: diagnostic },
-                  { paid: true }
-                );
-              } else {
-                return null;
-              }
+    if (transactionId && amount && booking) {
+      Promise.all([
+        razorpay.payments.fetch(transactionId),
+        DiagnosticBooking.findOne({ _id: booking }),
+      ])
+        .then(([razorRes, booking]) => {
+          if (razorRes && booking) {
+            new PaymentLedger({
+              type: "collection",
+              user: req.user._id,
+              amount,
+              paymentMethod,
+              note: "payment for diagnostics", // specific for this route
+              transactionId,
+              product: booking._id,
             })
-            .then((update) => {
-              if (update) {
-                res.json({ message: "payment successful" });
-                notify(
-                  update.vendor,
-                  JSON.stringify({
-                    title: "Payment recieved!",
-                    body: "Payment recieved for diagnostic booking.",
-                  }),
-                  "Vendor"
-                );
-              } else {
-                res.status(400).json({ message: "something went wrong" });
-              }
-            })
-            .catch((err) => {
-              if (err.code === 11000) {
-                res.status(400).json({
-                  message: "transaction id found in the database",
-                  code: err.code,
-                  field: Object.keys(err.keyValue)[0],
-                });
-              } else {
-                console.log(err);
-                res.status(500).json({ message: "something went wrong" });
-              }
+              .save()
+              .then((dbRes) => {
+                if (dbRes) {
+                  return DiagnosticBooking.findOneAndUpdate(
+                    { _id: diagnostic },
+                    { paid: true },
+                    { new: true }
+                  );
+                } else {
+                  return null;
+                }
+              })
+              .then((update) => {
+                if (update) {
+                  res.json({
+                    code: "ok",
+                    message: "payment successful",
+                    bookingInfo: update,
+                  });
+                  notify(
+                    update.vendor,
+                    JSON.stringify({
+                      title: "Payment recieved!",
+                      body: "Payment recieved for diagnostic booking.",
+                    }),
+                    "Vendor"
+                  );
+                } else {
+                  res
+                    .status(400)
+                    .json({ code: 400, message: "database error" });
+                }
+              })
+              .catch((err) => {
+                if (err.code === 11000) {
+                  res.status(429).json({
+                    code: 429,
+                    message: "transaction id found in the database",
+                  });
+                } else {
+                  console.log(err);
+                  res
+                    .status(500)
+                    .json({ code: 500, message: "something went wrong" });
+                }
+              });
+          } else {
+            res.status(400).json({
+              code: 400,
+              message: "payment or booking does not exist",
             });
-        } else {
-          res.status(400).json({ message: "bad request" });
-        }
-      })
-      .catch((err) => {
-        console.log(err);
-        res.status(500).json({ message: "something went wrong" });
+          }
+        })
+        .catch((err) => {
+          if (err.statusCode === 400) {
+            res
+              .status(404)
+              .json({ code: 404, message: "payment does not exist" });
+          } else {
+            console.log(err);
+            res.status(500).json({ code: 500, message: "database error" });
+          }
+        });
+    } else {
+      res.status(400).json({
+        code: 400,
+        message: "missing fields",
+        requiredFields: "transactionId, amount, booking",
+        fieldsFound: req.body,
+        success: false,
       });
+    }
   }
 );
