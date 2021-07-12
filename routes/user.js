@@ -53,93 +53,6 @@ app.post("/api/registerUser", (req, res) => {
     });
   }
 });
-app.post("/api/registerUserUsingOTP", async (req, res) => {
-  const { phone } = req.body;
-  if (phone) {
-    const user = await User.findOne({ phone });
-    if (user) {
-      signingIn(user._doc, res);
-      return;
-    } else {
-      const code = genCode(6);
-      console.log(code);
-      OTP.findOneAndDelete({ id: phone })
-        .then((dbRes) => bcrypt.hash(code, 10))
-        .then((hash) => new OTP({ id: phone, code: hash }).save())
-        .then((otp) => {
-          if (otp) {
-            // send sms here
-            res.json({
-              code: "ok",
-              message: "6 digit code has been sent to the user.",
-            });
-          } else {
-            res.status(500).json({ code: 500, message: "database error" });
-          }
-        })
-        .catch((err) => {
-          console.log(err);
-          res.status(500).json({ code: 500, message: "database error" });
-        });
-    }
-  } else {
-    res.status(400).json({
-      code: 400,
-      message: "phone is required",
-      success: false,
-    });
-  }
-});
-app.put("/api/submitUserRegisterOTP", async (req, res) => {
-  const { code, phone } = req.body;
-  const dbOtp = await OTP.findOne({ id: phone });
-  if (!dbOtp) {
-    res.status(404).json({ code: 404, message: "code does not exists" });
-    return;
-  }
-  if (phone && code) {
-    if (bcrypt.compareSync(code, dbOtp.code)) {
-      new User({ phone })
-        .save()
-        .then((user) => {
-          signingIn(user._doc, res);
-        })
-        .then(() => OTP.findOneAndDelete({ id: phone }))
-        .catch((err) => {
-          console.log(err);
-          res.status(429).json({
-            code: 429,
-            message: "phone exists in the database",
-            success: false,
-          });
-        });
-    } else {
-      if (dbOtp.attempt > 2) {
-        OTP.findOneAndDelete({ id: phone }).then(() => {
-          res
-            .status(403)
-            .json({ code: 403, message: "too many attempts, start again" });
-        });
-      } else {
-        dbOtp.updateOne({ attempt: dbOtp.attempt + 1 }).then(() => {
-          res.status(400).json({
-            code: 400,
-            message: "wrong code",
-            attempt: dbOtp.attempt + 1,
-          });
-        });
-      }
-    }
-  } else {
-    res.status(400).json({
-      code: 400,
-      message: "missing fields",
-      requiredFileds: "phone, code",
-      fieldsFound: req.body,
-      success: false,
-    });
-  }
-});
 app.post(
   "/api/userLogin",
   passport.authenticate("user", { session: false, failWithError: true }),
@@ -265,40 +178,29 @@ app.patch(
 app.post("/api/sendUserOTP", async (req, res) => {
   const { phone } = req.body;
   const code = genCode(6);
-  const [user, hash] = await Promise.all([
-    User.findOne({ phone }),
+  console.log(code);
+  const [hash, deleted] = await Promise.all([
     bcrypt.hash(code, 10),
     OTP.findOneAndDelete({ id: phone }),
   ]);
-  if (user) {
-    new OTP({
-      id: req.body.phone,
-      code: hash,
-    })
-      .save()
-      .then((dbRes) => {
-        if (dbRes) {
-          // send text massage here
-          res.json({
-            code: "ok",
-            message: "6 digit code has been sent, enter it within 2 minutes",
-            success: true,
-          });
-        } else {
-          res.status(500).json({ code: 500, message: "database error" });
-        }
-      })
-      .catch((err) => {
-        console.log(err);
+  new OTP({ id: phone, code: hash })
+    .save()
+    .then((dbRes) => {
+      if (dbRes) {
+        // send text massage here
+        res.json({
+          code: "ok",
+          message: "6 digit code has been sent, enter it within 2 minutes",
+          success: true,
+        });
+      } else {
         res.status(500).json({ code: 500, message: "database error" });
-      });
-  } else {
-    res.status(404).json({
-      code: 404,
-      message: "user does not exists",
-      success: false,
+      }
+    })
+    .catch((err) => {
+      console.log(err);
+      res.status(500).json({ code: 500, message: "database error" });
     });
-  }
 });
 app.put("/api/submitUserOTP", async (req, res) => {
   const { phone, code } = req.body;
@@ -308,9 +210,10 @@ app.put("/api/submitUserOTP", async (req, res) => {
     return;
   }
   if (bcrypt.compareSync(code, dbOtp.code)) {
-    User.findOne({ phone }).then((dbUser) => {
-      signingIn(dbUser._doc, res);
-    });
+    const user =
+      (await User.findOne({ phone })) || (await new User({ phone }).save());
+    signingIn(user._doc, res);
+    OTP.findOneAndDelete({ id: phone }).then((value) => {});
   } else {
     if (dbOtp.attempt > 2) {
       OTP.findOneAndDelete({ id: phone }).then(() => {
