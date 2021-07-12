@@ -28,7 +28,7 @@ const signingIn = (user, res) => {
   res.status(200).json({ code: "ok", isAuthenticated: true, user: user });
 };
 const handleSignIn = (req, res) => {
-  const user = JSON.parse(JSON.stringify(req.user));
+  const user = req.user._doc;
   signingIn(user, res);
 };
 

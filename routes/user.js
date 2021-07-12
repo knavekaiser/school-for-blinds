@@ -53,6 +53,93 @@ app.post("/api/registerUser", (req, res) => {
     });
   }
 });
+app.post("/api/registerUserUsingOTP", async (req, res) => {
+  const { phone } = req.body;
+  if (phone) {
+    const user = await User.findOne({ phone });
+    if (user) {
+      signingIn(user._doc, res);
+      return;
+    } else {
+      const code = genCode(6);
+      console.log(code);
+      OTP.findOneAndDelete({ id: phone })
+        .then((dbRes) => bcrypt.hash(code, 10))
+        .then((hash) => new OTP({ id: phone, code: hash }).save())
+        .then((otp) => {
+          if (otp) {
+            // send sms here
+            res.json({
+              code: "ok",
+              message: "6 digit code has been sent to the user.",
+            });
+          } else {
+            res.status(500).json({ code: 500, message: "database error" });
+          }
+        })
+        .catch((err) => {
+          console.log(err);
+          res.status(500).json({ code: 500, message: "database error" });
+        });
+    }
+  } else {
+    res.status(400).json({
+      code: 400,
+      message: "phone is required",
+      success: false,
+    });
+  }
+});
+app.put("/api/submitUserRegisterOTP", async (req, res) => {
+  const { code, phone } = req.body;
+  const dbOtp = await OTP.findOne({ id: phone });
+  if (!dbOtp) {
+    res.status(404).json({ code: 404, message: "code does not exists" });
+    return;
+  }
+  if (phone && code) {
+    if (bcrypt.compareSync(code, dbOtp.code)) {
+      new User({ phone })
+        .save()
+        .then((user) => {
+          signingIn(user._doc, res);
+        })
+        .then(() => OTP.findOneAndDelete({ id: phone }))
+        .catch((err) => {
+          console.log(err);
+          res.status(429).json({
+            code: 429,
+            message: "phone exists in the database",
+            success: false,
+          });
+        });
+    } else {
+      if (dbOtp.attempt > 2) {
+        OTP.findOneAndDelete({ id: phone }).then(() => {
+          res
+            .status(403)
+            .json({ code: 403, message: "too many attempts, start again" });
+        });
+      } else {
+        dbOtp.updateOne({ attempt: dbOtp.attempt + 1 }).then(() => {
+          res.status(400).json({
+            code: 400,
+            message: "wrong code",
+            attempt: dbOtp.attempt + 1,
+          });
+        });
+      }
+    }
+  } else {
+    res.status(400).json({
+      code: 400,
+      message: "missing fields",
+      requiredFileds: "phone, code",
+      fieldsFound: req.body,
+      success: false,
+    });
+  }
+});
 app.post(
   "/api/userLogin",
   passport.authenticate("user", { session: false, failWithError: true }),

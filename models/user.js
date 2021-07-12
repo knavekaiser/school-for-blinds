@@ -1,5 +1,5 @@
 const userModel = new Schema({
-  name: { type: String, required: true, trim: true },
+  name: { type: String, trim: true },
   googleId: { type: String, unique: true, sparse: true },
   facebookId: { type: String, unique: true, sparse: true },
   twitterId: { type: String, unique: true, sparse: true },
