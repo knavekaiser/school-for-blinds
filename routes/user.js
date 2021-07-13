@@ -179,28 +179,32 @@ app.post("/api/sendUserOTP", async (req, res) => {
   const { phone } = req.body;
   const code = genCode(6);
   console.log(code);
-  const [hash, deleted] = await Promise.all([
-    bcrypt.hash(code, 10),
-    OTP.findOneAndDelete({ id: phone }),
-  ]);
-  new OTP({ id: phone, code: hash })
-    .save()
-    .then((dbRes) => {
-      if (dbRes) {
-        // send text massage here
-        res.json({
-          code: "ok",
-          message: "6 digit code has been sent, enter it within 2 minutes",
-          success: true,
-        });
-      } else {
+  if (phone) {
+    const [hash, deleted] = await Promise.all([
+      bcrypt.hash(code, 10),
+      OTP.findOneAndDelete({ id: phone }),
+    ]);
+    new OTP({ id: phone, code: hash })
+      .save()
+      .then((dbRes) => {
+        if (dbRes) {
+          // send text massage here
+          res.json({
+            code: "ok",
+            message: "6 digit code has been sent, enter it within 2 minutes",
+            success: true,
+          });
+        } else {
+          res.status(500).json({ code: 500, message: "database error" });
+        }
+      })
+      .catch((err) => {
+        console.log(err);
         res.status(500).json({ code: 500, message: "database error" });
-      }
-    })
-    .catch((err) => {
-      console.log(err);
-      res.status(500).json({ code: 500, message: "database error" });
-    });
+      });
+  } else {
+    res.status(400).json({ code: 400, message: "phone is required" });
+  }
 });
 app.put("/api/submitUserOTP", async (req, res) => {
   const { phone, code } = req.body;
