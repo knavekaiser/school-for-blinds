@@ -192,6 +192,7 @@ app.post("/api/sendUserOTP", async (req, res) => {
           res.json({
             code: "ok",
             message: "6 digit code has been sent, enter it within 2 minutes",
+            testCode: code,
             success: true,
           });
         } else {
@@ -258,6 +259,7 @@ app.post("/api/sendUserForgotPassOTP", async (req, res) => {
             code: "ok",
             message: "6 digit code has been sent, enter it within 2 minutes",
             success: true,
+            testCode: code,
           });
         } else {
           res.status(500).json({ code: 500, message: "database error" });
