@@ -84,8 +84,18 @@ const notificationSubscriptionModel = new Schema(
     timestamps: true,
   }
 );
-
 global.NotificationSubscription = mongoose.model(
   "NotificationSubscription",
   notificationSubscriptionModel
 );
+
+const contactUsModel = new Schema(
+  {
+    name: { type: String, required: true },
+    phone: { type: String },
+    email: { type: String },
+    message: { type: String, required: true },
+  },
+  { timestamps: true }
+);
+global.ContactUs = mongoose.model("ContactUs", contactUsModel);

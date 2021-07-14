@@ -73,15 +73,25 @@ app.use(passport.initialize());
 require("./routes/user.js");
 
 app.post("/api/contactUsRequest", (req, res) => {
-  new ContactUs({ ...req.body })
-    .save()
-    .then((dbRes) => {
-      res.json({ message: "request submitted" });
-    })
-    .catch((err) => {
-      console.log(err);
-      res.status(500).json({ message: "something went wrong" });
-    });
+  const { name, email, phone, message } = req.body;
+  if (name && message && (email || phone)) {
+    new ContactUs({ ...req.body })
+      .save()
+      .then((dbRes) => {
+        res.json({ message: "request submitted" });
+      })
+      .catch((err) => {
+        console.log(err);
+        res.status(500).json({ message: "something went wrong" });
+      });
+  } else {
+    res
+      .status(400)
+      .json({
+        code: 400,
+        message: "name, message and phone/email is required",
+      });
+  }
 });
 
 app.get("/api/logout", (req, res) => {
