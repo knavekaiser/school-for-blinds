@@ -35,10 +35,14 @@ global.notify = (client, body, clientType) => {
       )
       .then((notificationSaved) => {});
   }
-  return NotificationSubscription.findOne({ client }).then((subscription) => {
-    if (subscription) {
-      return webPush.sendNotification(subscription, body);
-    }
+  return NotificationSubscription.find({ client }).then((subscriptions) => {
+    subscriptions.forEach((sub) => {
+      const { endpoint, keys } = sub;
+      const subscription = { endpoint, keys };
+      return webPush.sendNotification(subscription, body).catch((err) => {
+        console.log("could not send notification");
+      });
+    });
   });
 };
 
@@ -85,12 +89,10 @@ app.post("/api/contactUsRequest", (req, res) => {
         res.status(500).json({ message: "something went wrong" });
       });
   } else {
-    res
-      .status(400)
-      .json({
-        code: 400,
-        message: "name, message and phone/email is required",
-      });
+    res.status(400).json({
+      code: 400,
+      message: "name, message and phone/email is required",
+    });
   }
 });
 
@@ -175,7 +177,10 @@ app.delete("/unsubscribe", passport.authenticate("userPrivate"), (req, res) => {
     });
 });
 
-app.use(express.static("public"));
+app.use(express.static(path.join(__dirname, "client/build")));
+app.get("*", (req, res) =>
+  res.sendFile(path.join(__dirname, "/client/build/index.html"))
+);
 
 const io = socketIO(
   app.listen(PORT, () => {
