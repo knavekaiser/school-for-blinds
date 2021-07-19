@@ -12,7 +12,7 @@ require("./models/vendors");
 require("./models/products");
 require("./models/ledger");
 require("dotenv").config();
-const PORT = process.env.PORT || 8080;
+const PORT = process.env.PORT || 3001;
 const URI = process.env.MONGO_URI;
 const path = require("path");
 const Razorpay = require("razorpay");
