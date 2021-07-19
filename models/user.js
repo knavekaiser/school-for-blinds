@@ -39,6 +39,7 @@ const userModel = new Schema({
     prescriptions: [{ type: Schema.Types.ObjectId, ref: "Prescription" }],
     reports: [{ type: String }],
     otherData: [{ type: String }],
+    allergies: [{ type: String }],
   },
   active: { type: Boolean, default: true },
   notifications: [

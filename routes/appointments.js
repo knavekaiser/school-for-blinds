@@ -352,6 +352,21 @@ app.post(
   }
 );
 
+app.get(
+  "/api/getAllAppointments",
+  passport.authenticate("userPrivate"),
+  (req, res) => {
+    Book.find({ user: req.user._id })
+      .then((dbRes) => {
+        res.json(dbRes);
+      })
+      .catch((err) => {
+        console.log(err);
+        res.status(500).json({ code: 500, message: "database error" });
+      });
+  }
+);
+
 app.post(
   "/api/createLedgerForAppointmentUser",
   passport.authenticate("userPrivate"),
@@ -451,7 +466,6 @@ app.post(
     }
   }
 );
-
 app.patch(
   "/api/updateAppointment",
   passport.authenticate("userPrivate"),
